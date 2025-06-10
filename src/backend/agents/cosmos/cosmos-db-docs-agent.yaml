@@ -19,7 +19,7 @@ instructions: |
        ```text
        {{azureSearch.search "How do I configure throughput for a new container in Cosmos DB?"}}
        ```
-  2. Parse the returned JSON’s `results` field and pick the top 2–3 most relevant chunks.
+  2. Parse the returned JSON’s `results` field and pick the top 10 most relevant chunks.
   3. Provide a short explanation, then paste or paraphrase the relevant snippet(s).
   4. If code samples are present in the snippets, preserve the formatting.
   5. If the search returns zero results, reply:
