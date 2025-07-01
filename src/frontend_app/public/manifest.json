@@ -1,6 +1,6 @@
 {
-  "short_name": "Cosmos DB Support",
-  "name": "Azure Cosmos DB Support Chat",
+  "short_name": "Research Agent",
+  "name": "Deep Research Agent - AI-Powered Research Platform",
   "icons": [
     {
       "src": "favicon.ico",
@@ -10,6 +10,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#0078D4",
+  "theme_color": "#2E8B57",
   "background_color": "#ffffff"
 }

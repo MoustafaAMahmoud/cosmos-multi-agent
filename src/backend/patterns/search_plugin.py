@@ -15,10 +15,10 @@ from semantic_kernel.functions import kernel_function
 
 def azure_ai_search_plugin(
     query: str,
-    select: str = "chunk_id,parent_id,chunk,title",
+    select: str = "content_id,text_document_id,content_text,document_title,content_path",
     k: int = 10,
-    semantic_configuration: str = "cosmos-rag-semantic-configuration",
-    vector_field: str = "text_vector",
+    semantic_configuration: str = "research-agent-index-semantic-configuration",
+    vector_field: str = "content_embedding",
     query_type: str = "semantic",
     query_language: str = "en-GB",
     timeout: int = 30,
@@ -33,17 +33,23 @@ def azure_ai_search_plugin(
 
     search_endpoint = os.getenv("AZURE_AI_SEARCH_ENDPOINT")
     search_api_key = os.getenv("AZURE_AI_SEARCH_API_KEY")
-    index_name = "cosmos-rag"
+    service_name = os.getenv("AZURE_AI_SEARCH_SERVICE_NAME", "aifoundry")
+    index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "research-agent-index")
 
-    if not search_endpoint or not search_api_key:
-        logger.error("Azure AI Search endpoint and API key must be set.")
+    if not search_endpoint:
+        logger.error("Azure AI Search endpoint must be set.")
         return None
 
     if not query or not query.strip():
         logger.error("Search query is required.")
         return None
 
-    endpoint = f"{search_endpoint}/indexes/{index_name}/docs/search?api-version=2024-05-01-Preview"
+    # Construct the proper AI Foundry search endpoint
+    if "cognitiveservices.azure.com" in search_endpoint:
+        endpoint = f"{search_endpoint.rstrip('/')}/searchservices/{service_name}/indexes/{index_name}/docs/search?api-version=2024-05-01-Preview"
+    else:
+        # Fallback to traditional search service format
+        endpoint = f"{search_endpoint.rstrip('/')}/indexes/{index_name}/docs/search?api-version=2024-05-01-Preview"
     headers = {"Content-Type": "application/json", "api-key": search_api_key}
     payload = {
         "search": query,
@@ -90,7 +96,7 @@ def azure_ai_search_plugin(
 class AzureSearchPlugin:
     @kernel_function(
         name="search",
-        description="Perform a semantic + vector search against the Cosmos DB internal docs index",
+        description="Perform a semantic + vector search against the research agent index",
     )
     def search(self, query: str) -> str:
         """

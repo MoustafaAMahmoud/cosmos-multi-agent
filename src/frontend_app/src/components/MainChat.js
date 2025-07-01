@@ -11,19 +11,24 @@ import {
   useMediaQuery,
   Avatar,
   Tooltip,
-  Button
+  Button,
+  Chip
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import SendIcon from '@mui/icons-material/Send';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MicIcon from '@mui/icons-material/Mic';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import ScienceIcon from '@mui/icons-material/Science';
+import SearchIcon from '@mui/icons-material/Search';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CodeIcon from '@mui/icons-material/Code';
 import { useChatContext } from '../contexts/ChatContext';
 import { useTopicContext } from '../contexts/TopicContext';
 import MessageList from './MessageList';
 import CodeTestDisplay from './CodeTestDisplay';
 import TopicSelector from './TopicSelector';
+import { APP_CONFIG } from '../config/api';
 
 function MainChat({ handleDrawerToggle, darkMode }) {
   const [message, setMessage] = useState('');
@@ -92,26 +97,53 @@ function MainChat({ handleDrawerToggle, darkMode }) {
           <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
             <Box 
               sx={{ 
-                bgcolor: theme.palette.primary.main,
+                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                 color: 'white',
-                width: 32,
-                height: 32,
+                width: 36,
+                height: 36,
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                borderRadius: '4px',
-                mr: 1.5
+                borderRadius: '8px',
+                mr: 1.5,
+                boxShadow: '0 3px 10px rgba(46, 139, 87, 0.3)'
               }}
             >
-              <img 
-                src="/cosmos-db-logo.png" 
-                alt="Cosmos DB" 
-                style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }}
-              />
+              <ScienceIcon sx={{ fontSize: '1.4rem' }} />
             </Box>
-            <Typography variant="subtitle1" component="div" sx={{ fontWeight: 600 }}>
-              Azure Cosmos DB Support Chat
-            </Typography>
+            <Box>
+              <Typography variant="subtitle1" component="div" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                {APP_CONFIG.APP_NAME}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                <Chip 
+                  icon={<AutoAwesomeIcon sx={{ fontSize: '0.8rem' }} />}
+                  label="AI-Powered" 
+                  size="small" 
+                  sx={{ 
+                    height: 18, 
+                    fontSize: '0.65rem',
+                    bgcolor: theme.palette.secondary.main,
+                    color: 'white',
+                    fontWeight: 600,
+                    '& .MuiChip-icon': { color: 'white' }
+                  }} 
+                />
+                <Chip 
+                  icon={<SearchIcon sx={{ fontSize: '0.8rem' }} />}
+                  label="Exhaustive Research" 
+                  size="small" 
+                  sx={{ 
+                    height: 18, 
+                    fontSize: '0.65rem',
+                    bgcolor: theme.palette.primary.main,
+                    color: 'white',
+                    fontWeight: 600,
+                    '& .MuiChip-icon': { color: 'white' }
+                  }} 
+                />
+              </Box>
+            </Box>
           </Box>
           
           <Tooltip title="Code Syntax Test">
@@ -203,7 +235,7 @@ function MainChat({ handleDrawerToggle, darkMode }) {
             <TextField
               fullWidth
               variant="standard"
-              placeholder="Ask about Azure Cosmos DB..."
+              placeholder="Ask me anything - I'll research comprehensively using AI-powered analysis..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               // Input enabled by default

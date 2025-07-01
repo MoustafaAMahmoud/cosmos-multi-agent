@@ -7,6 +7,9 @@ import { atomDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pri
 import Avatar from '@mui/material/Avatar';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import ScienceIcon from '@mui/icons-material/Science';
+import Sources from './References';
+import { APP_CONFIG } from '../config/api';
 
 // Custom component for rendering code blocks with syntax highlighting
 const CodeBlock = ({ language, value, dark = true }) => {
@@ -212,25 +215,19 @@ function MessageList({ messages, isTyping, darkMode }) {
                 sx={{ 
                   mt: 0.5,
                   mr: 2, 
-                  bgcolor: theme.palette.primary.main,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                   color: 'white',
                   width: 36,
                   height: 36,
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  borderRadius: '4px',
+                  borderRadius: '8px',
                   flexShrink: 0,
-                  boxShadow: '0 2px 8px rgba(0, 120, 212, 0.15)',
-                  overflow: 'hidden',
-                  p: '6px'
+                  boxShadow: '0 3px 10px rgba(46, 139, 87, 0.3)',
                 }}
               >
-                <img 
-                  src="/cosmos-db-logo.png" 
-                  alt="Cosmos DB" 
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                />
+                <ScienceIcon sx={{ fontSize: '1.3rem' }} />
               </Box>
             )}
             
@@ -293,7 +290,55 @@ function MessageList({ messages, isTyping, darkMode }) {
                           </code>
                         );
                       },
-                      p: ({ children }) => <Typography variant="body1" sx={{ my: 1.5 }}>{children}</Typography>,
+                      p: ({ children }) => {
+                        // Process text for numbered citations [1], [2], etc.
+                        const processedChildren = React.Children.map(children, (child) => {
+                          if (typeof child === 'string') {
+                            // Replace [number] with styled citation components
+                            const parts = child.split(/(\[\d+\])/g);
+                            return parts.map((part, index) => {
+                              const citationMatch = part.match(/^\[(\d+)\]$/);
+                              if (citationMatch) {
+                                const citationNumber = citationMatch[1];
+                                return (
+                                  <Box
+                                    key={index}
+                                    component="span"
+                                    sx={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      width: 16,
+                                      height: 16,
+                                      borderRadius: '50%',
+                                      bgcolor: theme.palette.primary.main,
+                                      color: 'white',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 600,
+                                      mx: 0.25,
+                                      cursor: 'pointer',
+                                      '&:hover': {
+                                        bgcolor: theme.palette.primary.dark,
+                                      }
+                                    }}
+                                    title={`Source ${citationNumber}`}
+                                  >
+                                    {citationNumber}
+                                  </Box>
+                                );
+                              }
+                              return part;
+                            });
+                          }
+                          return child;
+                        });
+                        
+                        return (
+                          <Typography variant="body1" sx={{ my: 1.5 }}>
+                            {processedChildren}
+                          </Typography>
+                        );
+                      },
                       h1: ({ children }) => <Typography variant="h5" sx={{ mt: 3, mb: 1.5, fontWeight: 600 }}>{children}</Typography>,
                       h2: ({ children }) => <Typography variant="h6" sx={{ mt: 2.5, mb: 1.5, fontWeight: 600 }}>{children}</Typography>,
                       h3: ({ children }) => <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 600 }}>{children}</Typography>,
@@ -332,6 +377,17 @@ function MessageList({ messages, isTyping, darkMode }) {
                     {message.content}
                   </ReactMarkdown>
                 )}
+                
+                {/* Add Sources component for system messages with sources */}
+                {message.sender === 'system' && message.sources && message.sources.length > 0 && (
+                  <Sources 
+                    sources={message.sources}
+                    sourceCount={message.source_count}
+                    researchSummary={message.research_summary}
+                    researchTopic={message.research_topic}
+                    darkMode={darkMode}
+                  />
+                )}
               </Paper>
             )}
             
@@ -366,23 +422,19 @@ function MessageList({ messages, isTyping, darkMode }) {
               sx={{ 
                 mt: 0.5,
                 mr: 2, 
-                bgcolor: theme.palette.primary.main,
+                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                 color: 'white',
                 width: 36,
                 height: 36,
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                borderRadius: '4px',
+                borderRadius: '8px',
                 flexShrink: 0,
-                boxShadow: '0 2px 8px rgba(0, 120, 212, 0.15)'
+                boxShadow: '0 3px 10px rgba(46, 139, 87, 0.3)'
               }}
             >
-              <img 
-                src="/cosmos-db-logo.png" 
-                alt="Azure Cosmos DB" 
-                style={{ width: 24, height: 24, objectFit: 'contain' }}
-              />
+              <ScienceIcon sx={{ fontSize: '1.3rem' }} />
             </Box>
             
             <Paper

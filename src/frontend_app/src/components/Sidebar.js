@@ -16,21 +16,26 @@ import {
   Button,
   Tooltip,
   Switch,
-  FormControlLabel,
-  FormGroup
+  Chip
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
-import FileDocumentIcon from '@mui/icons-material/Description';
-import HomeIcon from '@mui/icons-material/Home';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import SearchIcon from '@mui/icons-material/Search';
+import HistoryIcon from '@mui/icons-material/History';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
+import ScienceIcon from '@mui/icons-material/Science';
+import SourceIcon from '@mui/icons-material/Source';
+import GitHubIcon from '@mui/icons-material/GitHub';
+import EmailIcon from '@mui/icons-material/Email';
 import { useTopicContext } from '../contexts/TopicContext';
 import { useChatContext } from '../contexts/ChatContext';
 import { useSettingsContext } from '../contexts/SettingsContext';
+import { APP_CONFIG, FEATURE_FLAGS } from '../config/api';
 
 const drawerWidth = 280;
 const collapsedWidth = 60;
@@ -74,41 +79,60 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
       }}>
         {!isCollapsed && (
           <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-            <img 
-              src="/cosmos-db-logo.png" 
-              alt="Cosmos DB Logo" 
-              style={{ 
-                width: 28, 
-                height: 28, 
-                marginRight: '8px', 
-                objectFit: 'contain' 
-              }} 
-            />
-            <Typography 
-              variant="subtitle1" 
-              component="div" 
-              sx={{ 
-                fontWeight: 600, 
-                color: darkMode ? 'white' : 'inherit'
-              }}
-            >
-              Azure Cosmos DB Support
-            </Typography>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: '8px',
+              background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+              marginRight: '12px',
+              boxShadow: '0 4px 12px rgba(46, 139, 87, 0.3)'
+            }}>
+              <ScienceIcon sx={{ color: 'white', fontSize: '1.5rem' }} />
+            </Box>
+            <Box>
+              <Typography 
+                variant="subtitle1" 
+                component="div" 
+                sx={{ 
+                  fontWeight: 700, 
+                  color: darkMode ? 'white' : 'inherit',
+                  lineHeight: 1.2
+                }}
+              >
+                {APP_CONFIG.APP_NAME}
+              </Typography>
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  color: darkMode ? 'rgba(255,255,255,0.7)' : 'text.secondary',
+                  fontSize: '0.7rem',
+                  fontWeight: 500
+                }}
+              >
+                {APP_CONFIG.COMPANY_NAME}
+              </Typography>
+            </Box>
           </Box>
         )}
         
         {isCollapsed && (
-          <Tooltip title="Azure Cosmos DB Support" placement="right">
-            <Box sx={{ mx: 'auto', my: 1 }}>
-              <img 
-                src="/cosmos-db-logo.png" 
-                alt="Cosmos DB Logo" 
-                style={{ 
-                  width: 32, 
-                  height: 32, 
-                  objectFit: 'contain' 
-                }} 
-              />
+          <Tooltip title={APP_CONFIG.APP_NAME} placement="right">
+            <Box sx={{ 
+              mx: 'auto', 
+              my: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              borderRadius: '10px',
+              background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+              boxShadow: '0 4px 12px rgba(46, 139, 87, 0.3)'
+            }}>
+              <ScienceIcon sx={{ color: 'white', fontSize: '1.6rem' }} />
             </Box>
           </Tooltip>
         )}
@@ -152,7 +176,7 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
                 fontWeight: 600
               }}
             >
-              Welcome
+              Research Session
             </Typography>
           </Box>
           <Box sx={{ 
@@ -165,8 +189,14 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
               bgcolor: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'
             }
           }}>
-            <Avatar sx={{ width: 32, height: 32, mr: 1.5, bgcolor: '#68768A' }}>
-              DU
+            <Avatar sx={{ 
+              width: 32, 
+              height: 32, 
+              mr: 1.5, 
+              bgcolor: theme.palette.primary.main,
+              background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
+            }}>
+              <ScienceIcon sx={{ fontSize: '1.1rem' }} />
             </Avatar>
             <Box>
               <Typography 
@@ -176,8 +206,19 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
                   color: darkMode ? 'white' : 'inherit'
                 }}
               >
-                Default User
+                {APP_CONFIG.RESEARCH_AGENT_NAME}
               </Typography>
+              <Chip 
+                label="Active" 
+                size="small" 
+                sx={{ 
+                  height: 16, 
+                  fontSize: '0.65rem',
+                  bgcolor: theme.palette.secondary.main,
+                  color: 'white',
+                  fontWeight: 600
+                }} 
+              />
             </Box>
           </Box>
         </Box>
@@ -186,30 +227,36 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
       {isCollapsed ? (
         <Box sx={{ mt: 2 }}>
           <List disablePadding>
-            <Tooltip title="Home" placement="right">
+            <Tooltip title="New Research" placement="right">
               <ListItem disablePadding sx={{ mb: 1 }}>
                 <ListItemButton 
                   onClick={handleGoToMainMenu}
                   sx={{ 
-                    borderRadius: 1,
+                    borderRadius: 2,
                     py: 1,
                     minHeight: 0,
                     mx: 'auto',
                     width: 40,
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    bgcolor: theme.palette.primary.main,
+                    color: 'white',
+                    '&:hover': {
+                      bgcolor: theme.palette.primary.dark,
+                      transform: 'scale(1.05)'
+                    }
                   }}
                 >
-                  <HomeIcon fontSize="small" sx={{ color: darkMode ? 'white' : '#68768A' }} />
+                  <SearchIcon fontSize="small" />
                 </ListItemButton>
               </ListItem>
             </Tooltip>
             
-            <Tooltip title="New Chat" placement="right">
+            <Tooltip title="Clear Session" placement="right">
               <ListItem disablePadding sx={{ mb: 1 }}>
                 <ListItemButton 
                   onClick={handleClearChat}
                   sx={{ 
-                    borderRadius: 1,
+                    borderRadius: 2,
                     py: 1,
                     minHeight: 0,
                     mx: 'auto',
@@ -217,20 +264,20 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
                     justifyContent: 'center'
                   }}
                 >
-                  <AddIcon fontSize="small" sx={{ color: darkMode ? 'white' : '#68768A' }} />
+                  <AddIcon fontSize="small" sx={{ color: darkMode ? 'white' : theme.palette.primary.main }} />
                 </ListItemButton>
               </ListItem>
             </Tooltip>
             
-            <Tooltip title="Documentation" placement="right">
+            <Tooltip title="Research Documentation" placement="right">
               <ListItem disablePadding sx={{ mb: 1 }}>
                 <ListItemButton
                   component="a"
-                  href="https://learn.microsoft.com/en-us/azure/cosmos-db/"
+                  href={APP_CONFIG.DOCS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   sx={{ 
-                    borderRadius: 1,
+                    borderRadius: 2,
                     py: 1,
                     minHeight: 0,
                     mx: 'auto',
@@ -238,7 +285,7 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
                     justifyContent: 'center'
                   }}
                 >
-                  <FileDocumentIcon fontSize="small" sx={{ color: darkMode ? 'white' : '#68768A' }} />
+                  <MenuBookIcon fontSize="small" sx={{ color: darkMode ? 'white' : theme.palette.primary.main }} />
                 </ListItemButton>
               </ListItem>
             </Tooltip>
@@ -284,28 +331,29 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
                   fontWeight: 600
                 }}
               >
-                Actions
+                Research Tools
               </Typography>
             </Box>
             
             <Button
               variant="contained"
               fullWidth
-              startIcon={<HomeIcon />}
+              startIcon={<SearchIcon />}
               onClick={handleGoToMainMenu}
               sx={{ 
                 mb: 2, 
                 textTransform: 'none',
-                borderRadius: '4px',
-                py: 0.75,
-                bgcolor: darkMode ? '#333' : undefined,
-                color: darkMode ? 'white' : undefined,
+                borderRadius: '8px',
+                py: 1,
+                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                boxShadow: '0 4px 12px rgba(46, 139, 87, 0.3)',
                 '&:hover': {
-                  bgcolor: darkMode ? '#444' : undefined
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 6px 16px rgba(46, 139, 87, 0.4)'
                 }
               }}
             >
-              Main Menu
+              New Research
             </Button>
             
             <Button
@@ -316,13 +364,17 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
               sx={{ 
                 mb: 2, 
                 textTransform: 'none',
-                borderRadius: '4px',
-                py: 0.75,
-                borderColor: darkMode ? '#555' : undefined,
-                color: darkMode ? 'white' : undefined
+                borderRadius: '8px',
+                py: 1,
+                borderColor: theme.palette.primary.main,
+                color: theme.palette.primary.main,
+                '&:hover': {
+                  bgcolor: `${theme.palette.primary.main}15`,
+                  borderColor: theme.palette.primary.dark
+                }
               }}
             >
-              Clear Chat
+              Clear Session
             </Button>
           </Box>
           
@@ -332,7 +384,7 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
               <ListItem disablePadding>
                 <ListItemButton 
                   component="a"
-                  href="https://learn.microsoft.com/en-us/azure/cosmos-db/"
+                  href={APP_CONFIG.DOCS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   sx={{ 
@@ -341,10 +393,50 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: 36 }}>
-                    <FileDocumentIcon fontSize="small" sx={{ color: darkMode ? 'white' : undefined }} />
+                    <MenuBookIcon fontSize="small" sx={{ color: darkMode ? 'white' : theme.palette.primary.main }} />
                   </ListItemIcon>
                   <ListItemText 
-                    primary="Documentation" 
+                    primary="Research Docs" 
+                    primaryTypographyProps={{ variant: 'body2' }}
+                  />
+                </ListItemButton>
+              </ListItem>
+              
+              <ListItem disablePadding>
+                <ListItemButton 
+                  component="a"
+                  href={APP_CONFIG.GITHUB_REPO}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ 
+                    borderRadius: 1,
+                    color: darkMode ? 'white' : 'inherit'
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <GitHubIcon fontSize="small" sx={{ color: darkMode ? 'white' : theme.palette.primary.main }} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Source Code" 
+                    primaryTypographyProps={{ variant: 'body2' }}
+                  />
+                </ListItemButton>
+              </ListItem>
+              
+              <ListItem disablePadding>
+                <ListItemButton 
+                  component="a"
+                  href={`mailto:${APP_CONFIG.SUPPORT_EMAIL}`}
+                  sx={{ 
+                    borderRadius: 1,
+                    color: darkMode ? 'white' : 'inherit'
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <EmailIcon fontSize="small" sx={{ color: darkMode ? 'white' : theme.palette.primary.main }} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Support" 
                     primaryTypographyProps={{ variant: 'body2' }}
                   />
                 </ListItemButton>
@@ -389,9 +481,9 @@ function Sidebar({ mobileOpen, handleDrawerToggle, darkMode, toggleDarkMode }) {
                     />
                   </ListItemIcon>
                   <ListItemText 
-                    primary="Show Debate Details" 
+                    primary="Research Process Details" 
                     primaryTypographyProps={{ variant: 'body2' }}
-                    secondary={settings.includeDebateDetails ? "Enabled" : "Disabled"}
+                    secondary={settings.includeDebateDetails ? "Showing analysis steps" : "Hiding analysis steps"}
                     secondaryTypographyProps={{ 
                       variant: 'caption',
                       sx: { color: darkMode ? 'rgba(255,255,255,0.7)' : 'text.secondary' }

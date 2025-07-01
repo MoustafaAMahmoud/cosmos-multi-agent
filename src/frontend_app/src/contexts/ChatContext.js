@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { sendChatMessageStreamed } from '../utils/apiClient';
 import { useSettingsContext } from './SettingsContext';
+import { APP_CONFIG } from '../config/api';
 
 const ChatContext = createContext();
 
@@ -23,7 +24,7 @@ export function ChatProvider({ children }) {
         {
           id: 'welcome-' + Date.now(),
           sender: 'system',
-          content: 'Welcome to Azure Cosmos DB Support. How can I help you today?',
+          content: `Welcome to ${APP_CONFIG.APP_NAME}! I'm your ${APP_CONFIG.RESEARCH_AGENT_NAME}, ready to conduct comprehensive research using AI-powered analysis. What topic would you like me to investigate for you today?`,
           timestamp: new Date().toISOString(),
         }
       ]);
@@ -164,6 +165,10 @@ export function ChatProvider({ children }) {
             sender: 'system',
             content: finalData.content || "I've processed your request.",
             timestamp: new Date().toISOString(),
+            sources: finalData.sources || [],
+            source_count: finalData.source_count || 0,
+            research_summary: finalData.research_summary || "",
+            research_topic: finalData.research_topic || "",
           };
           
           // Instead of replacing the temp message, we'll rename it and keep it
@@ -251,7 +256,7 @@ export function ChatProvider({ children }) {
       {
         id: 'welcome-' + Date.now(),
         sender: 'system',
-        content: 'Welcome to Azure Cosmos DB Support. How can I help you today?',
+        content: `Welcome to ${APP_CONFIG.APP_NAME}! I'm your ${APP_CONFIG.RESEARCH_AGENT_NAME}, ready to conduct comprehensive research using AI-powered analysis. What topic would you like me to investigate for you today?`,
         timestamp: new Date().toISOString(),
       }
     ]);
