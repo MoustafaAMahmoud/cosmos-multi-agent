@@ -60,8 +60,8 @@ from pydantic import BaseModel
 
 
 # Define request and response models
-class CosmosSupportRequest(BaseModel):
-    question: str = "Tell me about Azure Cosmos DB"
+class ResearchRequest(BaseModel):
+    question: str = "Help me with my research question"
     user_id: str = "default_user"
     include_debate_details: bool = False
     maximum_iterations: int = 10  # Optional parameter to control conversation length
@@ -88,14 +88,14 @@ class DebateResponse(BaseModel):
 orchestrator = DebateOrchestrator()
 
 
-@app.post("/api/v1/cosmos-support")
-async def http_cosmos_support(request_body: CosmosSupportRequest = Body(...)):
+@app.post("/api/v1/research-support")
+async def http_research_support(request_body: ResearchRequest = Body(...)):
     """
-    Process a Cosmos DB support query using the debate orchestrator.
+    Process a research query using the debate orchestrator.
 
     Args:
-        request_body (CosmosSupportRequest): Request body containing:
-            - question (str): The user's Cosmos DB question
+        request_body (ResearchRequest): Request body containing:
+            - question (str): The user's research question
             - user_id (str): Identifier for the user making the request
             - include_debate_details (bool): Whether to include full debate transcript
             - maximum_iterations (int): Maximum number of agent conversation turns
@@ -106,7 +106,7 @@ async def http_cosmos_support(request_body: CosmosSupportRequest = Body(...)):
         - "status": Status updates during processing
         - "response": Final response with answer and optional debate details
     """
-    logger.info("Cosmos support request received: %s", request_body.dict())
+    logger.info("Research support request received: %s", request_body.dict())
 
     # Generate a unique conversation ID if not provided
     user_id = request_body.user_id or f"user_{uuid.uuid4()}"

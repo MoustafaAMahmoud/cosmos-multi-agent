@@ -214,7 +214,7 @@ def set_up_logging():
 
 async def describe_next_action(kernel, settings, messages):
     """
-    Determines the next action in the Cosmos DB agent conversation workflow.
+    Determines the next action in the research agent conversation workflow.
 
     Args:
         kernel: The Semantic Kernel instance
@@ -222,7 +222,7 @@ async def describe_next_action(kernel, settings, messages):
         messages: Conversation history between agents
 
     Returns:
-        str: A brief summary of the next action, indicating which Cosmos DB specialist agent is acting
+        str: A brief summary of the next action, indicating which research agent is acting
     """
     # Get the last message to determine which agent just spoke
     last_message = messages[-1] if messages else {"name": "None"}
@@ -231,16 +231,17 @@ async def describe_next_action(kernel, settings, messages):
     next_action = await kernel.invoke_prompt(
         function_name="describe_next_action",
         prompt=f"""
-        Given the following conversation between Azure Cosmos DB specialist agents, describe the next action.
+        Given the following conversation between research agents, describe the next action.
 
         Provide a brief summary (3-5 words) of what's happening next in the format: "AGENT: Action description"
 
         AGENTS:
-        - CosmosDBDocsAgent: Retrieves and synthesizes internal-doc snippets
-        - Critic-Team: Evaluates completeness of solution
+        - ResearchAgent: Performs intelligent agentic retrieval and research analysis
+        - CompanyResearchAgent: Searches company knowledge base for research
+        - Critic-Team: Evaluates completeness of research solution
 
         If the last message is from Critic-Team with a score of 8 or higher, respond with "APPROVED: Solution complete"
-        If a complete solution has been reached, respond with "FINAL: Complete solution provided"
+        If a complete research solution has been reached, respond with "FINAL: Complete research provided"
 
         Last agent to speak: {last_agent}
 

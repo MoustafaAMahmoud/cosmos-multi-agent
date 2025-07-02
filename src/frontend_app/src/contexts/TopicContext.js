@@ -10,49 +10,49 @@ export function TopicProvider({ children }) {
   // Initialize with null to show the topic selector by default
   const [selectedTopic, setSelectedTopic] = useState(null);
   
-  // List of topics for Azure Cosmos DB support
+  // List of research topics for comprehensive analysis
   const topics = [
     { 
-      id: 'general', 
-      title: 'General Questions', 
-      description: 'Basic information about Cosmos DB', 
+      id: 'vaping-health', 
+      title: 'Vaping Health Effects', 
+      description: 'Research on health impacts of vaping', 
       icon: 'help_outline',
-      sampleQuestion: 'What is Azure Cosmos DB and how does it compare to other databases?'
+      sampleQuestion: 'What are the comprehensive health effects of vaping compared to traditional smoking?'
     },
     { 
-      id: 'provisioning', 
-      title: 'Provisioning & Scaling', 
-      description: 'Set up and scale your database', 
+      id: 'heating-technology', 
+      title: 'Heating Technology', 
+      description: 'Advanced heating systems and innovations', 
       icon: 'tune',
-      sampleQuestion: 'How do I provision throughput and scale my Cosmos DB resources effectively?'
+      sampleQuestion: 'What are the latest innovations in heat-not-burn tobacco heating technologies?'
     },
     { 
-      id: 'api', 
-      title: 'API Integration', 
-      description: 'Working with various APIs', 
+      id: 'regulatory', 
+      title: 'Regulatory Landscape', 
+      description: 'Legal and regulatory frameworks', 
       icon: 'code',
-      sampleQuestion: 'Can you show me an example of using the SQL API with Cosmos DB?'
+      sampleQuestion: 'What are the current regulatory requirements for vaping products across different countries?'
     },
     { 
-      id: 'performance', 
-      title: 'Performance Optimization', 
-      description: 'Improve query performance', 
+      id: 'market-trends', 
+      title: 'Market Analysis', 
+      description: 'Industry trends and market dynamics', 
       icon: 'speed',
-      sampleQuestion: 'What are the best practices for optimizing query performance in Cosmos DB?'
+      sampleQuestion: 'What are the current market trends and growth projections for the vaping industry?'
     },
     { 
-      id: 'security', 
-      title: 'Security & Compliance', 
-      description: 'Secure your Cosmos DB', 
+      id: 'safety-standards', 
+      title: 'Safety & Standards', 
+      description: 'Safety protocols and quality standards', 
       icon: 'security',
-      sampleQuestion: 'How can I implement robust security measures for my Cosmos DB account?'
+      sampleQuestion: 'What safety standards and quality control measures are applied in vaping device manufacturing?'
     },
     { 
-      id: 'troubleshooting', 
-      title: 'Troubleshooting', 
-      description: 'Resolve common issues', 
+      id: 'research-studies', 
+      title: 'Scientific Research', 
+      description: 'Latest research findings and studies', 
       icon: 'build',
-      sampleQuestion: 'How do I troubleshoot connection issues with my Cosmos DB instance?'
+      sampleQuestion: 'What do the latest clinical studies reveal about the long-term effects of heat-not-burn products?'
     }
   ];
 

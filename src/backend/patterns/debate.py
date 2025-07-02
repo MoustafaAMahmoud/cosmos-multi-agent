@@ -2,8 +2,11 @@ import os
 import re
 import json
 import logging
-from typing import ClassVar
+from typing import ClassVar, Optional, Any, Callable
 import datetime
+import asyncio
+import time
+from functools import wraps
 from utils.util import describe_next_action
 from patterns.agent_manager import AgentManager
 
@@ -30,6 +33,7 @@ from semantic_kernel.connectors.ai.azure_ai_inference import (
 )
 from azure.ai.inference.aio import ChatCompletionsClient
 from azure.identity.aio import DefaultAzureCredential
+from azure.core.exceptions import HttpResponseError
 
 from semantic_kernel.contents import ChatHistory
 from semantic_kernel.agents.strategies import (
@@ -40,7 +44,7 @@ from semantic_kernel.agents.strategies import (
 from semantic_kernel.agents.strategies.selection.selection_strategy import (
     SelectionStrategy,
 )
-from .search_plugin import AzureSearchPlugin
+from .agentic_retrieval_plugin import AgenticRetrievalPlugin
 from opentelemetry.trace import get_tracer
 
 from pydantic import Field
@@ -110,6 +114,15 @@ class DebateOrchestrator:
             ),
         )
 
+        # Create the agentic retrieval plugin and store reference
+        self.logger.info("[DebateOrchestrator] Creating AgenticRetrievalPlugin...")
+        try:
+            self.agentic_plugin = AgenticRetrievalPlugin(kernel=None)
+            self.logger.info("[DebateOrchestrator] AgenticRetrievalPlugin created successfully")
+        except Exception as e:
+            self.logger.error(f"[DebateOrchestrator] Failed to create AgenticRetrievalPlugin: {e}")
+            self.agentic_plugin = None
+
         self.kernel = Kernel(
             services=[executor_service, utility_service],
             plugins=[
@@ -117,7 +130,7 @@ class DebateOrchestrator:
                     plugin_instance=TimePlugin(), plugin_name="time"
                 ),
                 KernelPlugin.from_object(
-                    plugin_instance=AzureSearchPlugin(), plugin_name="azureSearch"
+                    plugin_instance=self.agentic_plugin, plugin_name="agenticSearch"
                 ),
             ],
         )
@@ -138,7 +151,7 @@ class DebateOrchestrator:
     # Create Agent Group Chat
     # --------------------------------------------
     def create_agent_group_chat(
-        self, agents_directory="agents/cosmos", maximum_iterations=3
+        self, agents_directory="agents/research", maximum_iterations=3
     ):
         """
         Creates and configures an agent group chat with Writer and Critic agents.
@@ -183,7 +196,7 @@ class DebateOrchestrator:
         self, user_id, conversation_messages, maximum_iterations=3
     ):
         """
-        Processes a conversation by orchestrating interactions between Cosmos DB specialist agents.
+        Processes a conversation by orchestrating interactions between Research KB specialist agents.
 
         Manages the entire conversation flow from initialization to response collection, uses OpenTelemetry
         for tracing, and provides status updates throughout the conversation.
@@ -209,10 +222,46 @@ class DebateOrchestrator:
                 # Add any other simple fields you need, but avoid complex objects
             }
 
+        # Define retry decorator for rate limit handling
+        async def retry_with_backoff(
+            func: Callable,
+            max_retries: int = 3,
+            initial_delay: float = 2.0,
+            backoff_factor: float = 2.0,
+            max_delay: float = 30.0
+        ):
+            """Retry function with exponential backoff for rate limit errors."""
+            last_exception = None
+            
+            for attempt in range(max_retries):
+                try:
+                    return await func()
+                except Exception as e:
+                    error_str = str(e)
+                    # Check if it's a rate limit error (429)
+                    if "429" in error_str or "rate limit" in error_str.lower() or "RateLimitError" in str(type(e)):
+                        last_exception = e
+                        if attempt < max_retries - 1:
+                            # Calculate delay with exponential backoff
+                            delay = min(initial_delay * (backoff_factor ** attempt), max_delay)
+                            self.logger.warning(
+                                f"Rate limit hit (attempt {attempt + 1}/{max_retries}). "
+                                f"Retrying in {delay:.1f} seconds..."
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                    # Re-raise if not a rate limit error
+                    raise e
+            
+            # If we exhausted all retries, raise the last exception
+            if last_exception:
+                raise last_exception
+
         try:
-            # Create the agent group chat with specialized Cosmos DB agents
+            # Create the agent group chat with specialized research agents
             self.agent_group_chat = self.create_agent_group_chat(
-                agents_directory="agents/cosmos", maximum_iterations=maximum_iterations
+                agents_directory="agents/research",
+                maximum_iterations=maximum_iterations,
             )
 
             # Extract user query
@@ -223,7 +272,12 @@ class DebateOrchestrator:
 
             if not user_query:
                 self.logger.warning("No user query found in conversation messages")
-                user_query = "Tell me about Azure Cosmos DB"
+                user_query = "Please help me with my research question"
+
+            # Set the user query on the agentic retrieval plugin for context
+            if self.agentic_plugin:
+                self.agentic_plugin.set_current_query(user_query)
+                self.logger.info(f"Set user query on agentic plugin: {user_query}")
 
             # Format user message for add_chat_messages
             user_messages = [
@@ -264,22 +318,31 @@ class DebateOrchestrator:
 
             # Store the final response during the conversation
             final_response = None
-            cosmos_agents = []
+            research_agents = []
+            
+            # Store all retrieval references from the conversation
+            all_references = {}
 
             # Start the traced conversation session
             with tracer.start_as_current_span(session_id):
                 # Initial status message
-                yield "Evaluating your Cosmos DB requirements..."
+                yield "Processing your research query..."
 
                 # Get agent names for later use
-                cosmos_agents = [
+                research_agents = [
                     agent.name
                     for agent in self.agent_manager.get_all_agents()
-                    if agent.name.startswith("Cosmos")
+                    if "Research" in agent.name
                 ]
 
-                # Process each message in the conversation
+                # Process each message in the conversation with rate limit protection
+                message_count = 0
                 async for agent_message in self.agent_group_chat.invoke():
+                    # Add progressive delay between messages to prevent rate limits
+                    if message_count > 0:
+                        await asyncio.sleep(0.5)  # 500ms delay between agent messages
+                    message_count += 1
+                    
                     # Log the message
                     msg_dict = agent_message.to_dict()
                     self.logger.info("Agent: %s", msg_dict)
@@ -292,18 +355,30 @@ class DebateOrchestrator:
                     clean_message = clean_message_for_json(message_dict)
                     clean_debate_transcript.append(clean_message)
 
-                    # Store potential final response from Cosmos agents
-                    if agent_message.name in cosmos_agents:
+                    # Store potential final response from research agents
+                    if agent_message.name in research_agents:
                         final_response = clean_message_for_json(message_dict)
 
                     # Increment iteration count
                     iteration_count += 1
 
-                    # Generate descriptive status for the client
-                    next_action = await describe_next_action(
-                        self.kernel, self.settings_utility, messages
-                    )
-                    self.logger.info("%s", next_action)
+                    # Generate descriptive status for the client with retry logic
+                    try:
+                        async def get_next_action():
+                            return await describe_next_action(
+                                self.kernel, self.settings_utility, messages
+                            )
+                        
+                        # Use retry logic for the describe_next_action call
+                        next_action = await retry_with_backoff(
+                            get_next_action,
+                            max_retries=2,
+                            initial_delay=1.0
+                        )
+                        self.logger.info("%s", next_action)
+                    except Exception as e:
+                        self.logger.warning(f"Failed to describe next action after retries: {e}")
+                        next_action = "Processing research..."
 
                     # Yield status update
                     yield f"{next_action}"
@@ -339,12 +414,68 @@ class DebateOrchestrator:
                     # Ultimate fallback if no messages found
                     final_response = {
                         "role": "assistant",
-                        "content": "I wasn't able to generate a complete response. Please try again with more specific requirements about Azure Cosmos DB.",
-                        "name": "CosmosDBDocsAgent",
+                        "content": "I wasn't able to generate a complete response. Please try again with more specific requirements about your research question.",
+                        "name": "ResearchAgent",
                     }
 
             # Add the clean transcript to the final response
             final_response["debate_transcript"] = clean_debate_transcript
+            
+            # Collect all sources from the agentic retrieval plugin using exhaustive search results
+            sources = []
+            if self.agentic_plugin and hasattr(self.agentic_plugin, 'retrieval_results'):
+                citation_counter = 1
+                processed_docs = set()
+                
+                # Get all cached retrieval results from exhaustive research
+                for conversation_id, results in self.agentic_plugin.retrieval_results.items():
+                    for result in results:
+                        doc_title = result.get('document_title', 'Unknown Document')
+                        
+                        # Only add each document once
+                        if doc_title not in processed_docs:
+                            processed_docs.add(doc_title)
+                            content_snippet = result.get('content_text', '')[:200] + "..." if len(result.get('content_text', '')) > 200 else result.get('content_text', '')
+                            
+                            # Generate SAS URL for PDF documents
+                            document_url = ""
+                            if doc_title.endswith('.pdf') and self.agentic_plugin:
+                                document_url = self.agentic_plugin._generate_blob_sas_url(doc_title)
+                            elif result.get('content_path', '') and result.get('content_path', '').startswith("http"):
+                                document_url = result.get('content_path', '')
+                            
+                            # Create topic relation summary for this source
+                            topic_relation_summary = ""
+                            if user_query and self.agentic_plugin:
+                                topic_relation_summary = self.agentic_plugin._create_source_summary(result, user_query)
+                            
+                            sources.append({
+                                'citation_number': citation_counter,
+                                'title': doc_title,
+                                'filename': doc_title,
+                                'content_snippet': content_snippet,
+                                'topic_relation_summary': topic_relation_summary,
+                                'relevance_score': result.get('@search.reranker_score', result.get('@search.score', 0)),
+                                'content_type': 'image' if result.get('content_path', '') and 'images/' in result.get('content_path', '') else 'text',
+                                'document_url': document_url
+                            })
+                            citation_counter += 1
+            
+            # Add comprehensive research summary
+            if sources:
+                research_summary = (
+                    f"Comprehensive research identified {len(sources)} relevant sources covering "
+                    f"multiple aspects of the topic. The research includes technical documentation, "
+                    f"academic studies, and practical applications."
+                )
+            else:
+                research_summary = "Limited sources were found for this research topic."
+            
+            # Add enhanced sources response for exhaustive research
+            final_response["sources"] = sources
+            final_response["source_count"] = len(sources)
+            final_response["research_summary"] = research_summary
+            final_response["research_topic"] = user_query or "Unknown topic"
 
             # Final message is formatted as JSON to indicate the final response
             yield json.dumps(final_response)
@@ -356,7 +487,7 @@ class DebateOrchestrator:
             # Return a user-friendly error message
             error_response = {
                 "role": "assistant",
-                "content": "I encountered an issue while processing your request. Please try again with a more specific question about Azure Cosmos DB.",
+                "content": "I encountered an issue while processing your request. Please try again with a more specific research question.",
                 "error": str(e),
             }
             yield json.dumps(error_response)

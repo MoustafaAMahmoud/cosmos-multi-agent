@@ -15,17 +15,26 @@ import CodeIcon from '@mui/icons-material/Code';
 import SpeedIcon from '@mui/icons-material/Speed';
 import SecurityIcon from '@mui/icons-material/Security';
 import BuildIcon from '@mui/icons-material/Build';
+import ScienceIcon from '@mui/icons-material/Science';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+import WhatshotIcon from '@mui/icons-material/Whatshot';
+import BalanceIcon from '@mui/icons-material/Balance';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import BiotechIcon from '@mui/icons-material/Biotech';
 import { useTopicContext } from '../contexts/TopicContext';
 import { useChatContext } from '../contexts/ChatContext';
+import { APP_CONFIG } from '../config/api';
 
-// Map icon names to Material UI icon components
+// Map icon names to Material UI icon components for research topics
 const iconMap = {
-  'help_outline': <HelpOutlineIcon />,
-  'tune': <TuneIcon />,
-  'code': <CodeIcon />,
-  'speed': <SpeedIcon />,
-  'security': <SecurityIcon />,
-  'build': <BuildIcon />
+  'help_outline': <HealthAndSafetyIcon />,  // Vaping Health Effects
+  'tune': <WhatshotIcon />,                 // Heating Technology  
+  'code': <BalanceIcon />,                  // Regulatory Landscape
+  'speed': <TrendingUpIcon />,              // Market Analysis
+  'security': <VerifiedUserIcon />,         // Safety & Standards
+  'build': <BiotechIcon />                  // Scientific Research
 };
 
 function TopicSelector({ darkMode }) {
@@ -57,58 +66,70 @@ function TopicSelector({ darkMode }) {
                   justifyContent: 'center',
                   width: 120,
                   height: 120,
-                  mb: 2
+                  mb: 2,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                  borderRadius: '20px',
+                  boxShadow: '0 8px 32px rgba(46, 139, 87, 0.3)',
+                  '&:hover': {
+                    transform: 'scale(1.05)',
+                    boxShadow: '0 12px 40px rgba(46, 139, 87, 0.4)',
+                  },
+                  transition: 'all 0.3s ease'
                 }}
               >
-                <img 
-                  src="/cosmos-db-logo.png" 
-                  alt="Azure Cosmos DB Logo" 
-                  className="cosmos-logo"
-                  style={{ 
-                    width: '100%', 
-                    height: '100%', 
-                    objectFit: 'contain'
-                  }} 
-                />
+                <ScienceIcon sx={{ fontSize: '4rem', color: 'white' }} />
                 <Box 
-                  className="cosmos-star"
+                  className="research-particle"
                   sx={{
                     position: 'absolute',
                     top: -10,
-                    left: 0,
-                    width: 20,
-                    height: 20,
+                    left: 10,
+                    width: 12,
+                    height: 12,
                     borderRadius: '50%',
-                    backgroundColor: '#50E6FF',
-                    filter: 'blur(2px)'
+                    backgroundColor: theme.palette.secondary.main,
+                    filter: 'blur(1px)',
+                    animation: 'float 3s ease-in-out infinite'
                   }}
                 />
                 <Box 
-                  className="cosmos-star"
+                  className="research-particle"
                   sx={{
                     position: 'absolute',
-                    bottom: 0,
-                    right: -10,
-                    width: 16,
-                    height: 16,
+                    bottom: 5,
+                    right: -5,
+                    width: 8,
+                    height: 8,
                     borderRadius: '50%',
-                    backgroundColor: '#50E6FF',
-                    filter: 'blur(2px)'
+                    backgroundColor: theme.palette.primary.light,
+                    filter: 'blur(1px)',
+                    animation: 'float 2s ease-in-out infinite reverse'
+                  }}
+                />
+                <AutoAwesomeIcon 
+                  sx={{
+                    position: 'absolute',
+                    top: 10,
+                    right: 10,
+                    fontSize: '1.2rem',
+                    color: 'white',
+                    opacity: 0.8,
+                    animation: 'sparkle 2s ease-in-out infinite'
                   }}
                 />
               </Box>
             </Zoom>
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, mt: 1 }}>
-              Azure Cosmos DB Support Chat
+            <Typography variant="h4" gutterBottom sx={{ fontWeight: 700, mt: 1 }}>
+              {APP_CONFIG.APP_NAME}
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
-              Chat with specialized Azure Cosmos DB agents to get expert advice on your database needs.
+            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto', lineHeight: 1.6 }}>
+              {APP_CONFIG.APP_SUBTITLE} - Leverage AI-powered multi-agent collaboration to find comprehensive answers with exhaustive source analysis.
             </Typography>
           </Box>
           
           <Box sx={{ mb: 3, mt: 6 }}>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-              Select a topic to get started:
+              Choose a research area to begin your comprehensive analysis:
             </Typography>
           </Box>
           
