@@ -2,7 +2,7 @@ import os
 import re
 import json
 import logging
-from typing import ClassVar, Optional, Any, Callable
+from typing import ClassVar, Optional, Any, Callable, Dict, List
 import datetime
 import asyncio
 import time
@@ -21,7 +21,6 @@ from semantic_kernel.connectors.ai.open_ai import AzureChatPromptExecutionSettin
 
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
-from semantic_kernel.core_plugins.time_plugin import TimePlugin
 from semantic_kernel.functions import (
     KernelPlugin,
     KernelFunctionFromPrompt,
@@ -44,8 +43,17 @@ from semantic_kernel.agents.strategies import (
 from semantic_kernel.agents.strategies.selection.selection_strategy import (
     SelectionStrategy,
 )
-from .agentic_retrieval_plugin import AgenticRetrievalPlugin
-from opentelemetry.trace import get_tracer
+try:
+    from .simple_agentic_retrieval import SimpleAgenticRetrieval
+    AGENTIC_RETRIEVAL_AVAILABLE = True
+except ImportError as e:
+    # Handle Azure AI package import failures gracefully
+    import logging
+    logging.error(f"Azure AI agentic retrieval is not available: {e}")
+    AGENTIC_RETRIEVAL_AVAILABLE = False
+    AGENTIC_RETRIEVAL_ERROR = str(e)
+# Commented out tracing to avoid Azure AI package import issues
+# from opentelemetry.trace import get_tracer
 
 from pydantic import Field
 ########################################
@@ -89,9 +97,17 @@ class DebateOrchestrator:
 
         credential = DefaultAzureCredential()
 
-        # Multi model setup - a service is an LLM in SK terms
-        # Executor - gpt-4o
-        # Utility  - gpt-4o-mini
+        # Multi model setup for cost optimization - a service is an LLM in SK terms
+        # 
+        # Why two models?
+        # - Executor (gpt-4o): High-capability model for research agents and complex reasoning
+        # - Utility (gpt-4o-mini): Cost-effective model for background tasks like status updates
+        # 
+        # This dual-model approach reduces costs by using the expensive model only for 
+        # actual research tasks while using the cheaper model for descriptive/utility functions.
+        #
+        # Executor - gpt-4o (primary research and agent conversations)
+        # Utility  - gpt-4o-mini (status updates, progress descriptions)
         executor_service = AzureAIInferenceChatCompletion(
             ai_model_id="executor",
             service_id="executor",
@@ -114,25 +130,35 @@ class DebateOrchestrator:
             ),
         )
 
-        # Create the agentic retrieval plugin and store reference
-        self.logger.info("[DebateOrchestrator] Creating AgenticRetrievalPlugin...")
-        try:
-            self.agentic_plugin = AgenticRetrievalPlugin(kernel=None)
-            self.logger.info("[DebateOrchestrator] AgenticRetrievalPlugin created successfully")
-        except Exception as e:
-            self.logger.error(f"[DebateOrchestrator] Failed to create AgenticRetrievalPlugin: {e}")
+        # Create the simple agentic retrieval plugin
+        if AGENTIC_RETRIEVAL_AVAILABLE:
+            self.logger.info("[DebateOrchestrator] Creating SimpleAgenticRetrieval...")
+            try:
+                self.agentic_plugin = SimpleAgenticRetrieval()
+                self.logger.info("[DebateOrchestrator] SimpleAgenticRetrieval created successfully")
+            except Exception as e:
+                self.logger.error(f"[DebateOrchestrator] Failed to create SimpleAgenticRetrieval: {e}")
+                self.agentic_plugin = None
+        else:
+            self.logger.error("[DebateOrchestrator] Azure AI agentic retrieval is not available")
+            self.logger.error(f"[DebateOrchestrator] Error: {AGENTIC_RETRIEVAL_ERROR}")
+            self.logger.error("[DebateOrchestrator] The API will not function properly without Azure AI packages")
             self.agentic_plugin = None
 
-        self.kernel = Kernel(
-            services=[executor_service, utility_service],
-            plugins=[
-                KernelPlugin.from_object(
-                    plugin_instance=TimePlugin(), plugin_name="time"
-                ),
+        # Create kernel with or without agentic plugin
+        plugins = []
+        if self.agentic_plugin:
+            plugins.append(
                 KernelPlugin.from_object(
                     plugin_instance=self.agentic_plugin, plugin_name="agenticSearch"
-                ),
-            ],
+                )
+            )
+        else:
+            self.logger.warning("[DebateOrchestrator] No agentic search plugin available - agents will not be able to search")
+        
+        self.kernel = Kernel(
+            services=[executor_service, utility_service],
+            plugins=plugins,
         )
 
         self.settings_executor = AzureChatPromptExecutionSettings(
@@ -193,7 +219,7 @@ class DebateOrchestrator:
         return agent_group_chat
 
     async def process_conversation(
-        self, user_id, conversation_messages, maximum_iterations=3
+        self, user_id: str, conversation_messages: List[Dict[str, Any]], maximum_iterations: int = 3
     ):
         """
         Processes a conversation by orchestrating interactions between Research KB specialist agents.
@@ -211,7 +237,7 @@ class DebateOrchestrator:
             Status updates during processing and the final response in JSON format.
         """
 
-        def clean_message_for_json(message_dict):
+        def clean_message_for_json(message_dict: Dict[str, Any]) -> Dict[str, Any]:
             """
             Create a clean, JSON-serializable version of a message dictionary.
             """
@@ -278,6 +304,8 @@ class DebateOrchestrator:
             if self.agentic_plugin:
                 self.agentic_plugin.set_current_query(user_query)
                 self.logger.info(f"Set user query on agentic plugin: {user_query}")
+            else:
+                self.logger.warning("No agentic plugin available - search functionality will not work")
 
             # Format user message for add_chat_messages
             user_messages = [
@@ -300,118 +328,156 @@ class DebateOrchestrator:
                 except Exception as e:
                     self.logger.warning(f"Error adding chat messages: {e}")
 
-            # Setup OpenTelemetry tracing
-            tracer = get_tracer(__name__)
+            # Setup OpenTelemetry tracing - commented out to avoid import issues
+            # tracer = get_tracer(__name__)
 
             # Create a unique session ID for tracing purposes
             current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
             session_id = f"{user_id}-{current_time}"
 
             # Track all messages exchanged during this conversation
-            messages = []
+            messages: List[Dict[str, Any]] = []
 
             # List to store clean debate messages for the response
-            clean_debate_transcript = []
+            clean_debate_transcript: List[Dict[str, Any]] = []
 
             # Track iterations to prevent infinite loops
             iteration_count = 0
 
             # Store the final response during the conversation
             final_response = None
-            research_agents = []
+            research_agents: List[str] = []
             
             # Store all retrieval references from the conversation
-            all_references = {}
+            all_references: Dict[str, Any] = {}
 
-            # Start the traced conversation session
-            with tracer.start_as_current_span(session_id):
-                # Initial status message
-                yield "Processing your research query..."
+            # Start the conversation session (tracing commented out)
+            # with tracer.start_as_current_span(session_id):
+            
+            # Initial status message
+            yield "Processing your research query..."
 
-                # Get agent names for later use
-                research_agents = [
-                    agent.name
-                    for agent in self.agent_manager.get_all_agents()
-                    if "Research" in agent.name
-                ]
+            # Get agent names for later use
+            research_agents = [
+                agent.name
+                for agent in self.agent_manager.get_all_agents()
+                if "Research" in agent.name
+            ]
 
-                # Process each message in the conversation with rate limit protection
-                message_count = 0
-                async for agent_message in self.agent_group_chat.invoke():
-                    # Add progressive delay between messages to prevent rate limits
-                    if message_count > 0:
-                        await asyncio.sleep(0.5)  # 500ms delay between agent messages
-                    message_count += 1
+            # Process each message in the conversation with rate limit protection
+            message_count = 0
+            async for agent_message in self.agent_group_chat.invoke():
+                # Add progressive delay between messages to prevent rate limits
+                if message_count > 0:
+                    await asyncio.sleep(0.5)  # 500ms delay between agent messages
+                message_count += 1
+                
+                # Log the message
+                msg_dict = agent_message.to_dict()
+                self.logger.info("Agent: %s", msg_dict)
+
+                # Add to messages collection
+                message_dict = agent_message.to_dict()
+                messages.append(message_dict)
+
+                # Add clean version to debate transcript
+                clean_message = clean_message_for_json(message_dict)
+                clean_debate_transcript.append(clean_message)
+
+                # Check for search errors and interrupt API immediately
+                message_content = message_dict.get("content", "")
+                if any(error_phrase in message_content for error_phrase in [
+                    "I cannot retrieve information from the knowledge base",
+                    "Azure AI packages not properly installed",
+                    "Missing required environment variables",
+                    "AZURE_AI_FOUNDRY_PROJECT",
+                    "AZURE_AI_SEARCH_ENDPOINT"
+                ]):
+                    self.logger.error(f"Search error detected in agent response: {message_content}")
+                    # Return error response immediately to interrupt the API
+                    error_response = {
+                        "role": "assistant",
+                        "content": "I cannot retrieve information from the knowledge base at this time. Please check the search service configuration.",
+                        "error": "Search service unavailable",
+                        "name": agent_message.name or "ResearchAgent"
+                    }
+                    yield json.dumps(error_response)
+                    return  # Exit the function immediately
+
+                # Store potential final response from research agents
+                # Only store non-APPROVED/REJECTED messages as final response
+                if (agent_message.name in research_agents and 
+                    not message_content.startswith("APPROVED") and
+                    not message_content.startswith("REJECTED") and
+                    "## Research Summary" in message_content):
+                    final_response = clean_message_for_json(message_dict)
+
+                # Increment iteration count
+                iteration_count += 1
+
+                # Generate descriptive status for the client with retry logic
+                try:
+                    async def get_next_action():
+                        return await describe_next_action(
+                            self.kernel, self.settings_utility, messages
+                        )
                     
-                    # Log the message
-                    msg_dict = agent_message.to_dict()
-                    self.logger.info("Agent: %s", msg_dict)
+                    # Use retry logic for the describe_next_action call
+                    next_action = await retry_with_backoff(
+                        get_next_action,
+                        max_retries=2,
+                        initial_delay=1.0
+                    )
+                    self.logger.info("%s", next_action)
+                except Exception as e:
+                    self.logger.warning(f"Failed to describe next action after retries: {e}")
+                    next_action = "Processing research..."
 
-                    # Add to messages collection
-                    message_dict = agent_message.to_dict()
-                    messages.append(message_dict)
+                # Yield status update
+                yield f"{next_action}"
 
-                    # Add clean version to debate transcript
-                    clean_message = clean_message_for_json(message_dict)
-                    clean_debate_transcript.append(clean_message)
+                # Check for termination conditions
+                if (
+                    "APPROVED:" in next_action
+                    or "FINAL:" in next_action
+                    or "Solution complete" in next_action
+                    or iteration_count >= maximum_iterations
+                ):
+                    self.logger.info(
+                        f"Conversation terminating: {next_action} (iteration {iteration_count})"
+                    )
+                    break
 
-                    # Store potential final response from research agents
-                    if agent_message.name in research_agents:
-                        final_response = clean_message_for_json(message_dict)
+                # Safety check - prevent infinite loops
+                if iteration_count >= maximum_iterations * 2:
+                    self.logger.warning(
+                        f"Force terminating after {iteration_count} iterations"
+                    )
+                    break
 
-                    # Increment iteration count
-                    iteration_count += 1
-
-                    # Generate descriptive status for the client with retry logic
-                    try:
-                        async def get_next_action():
-                            return await describe_next_action(
-                                self.kernel, self.settings_utility, messages
-                            )
-                        
-                        # Use retry logic for the describe_next_action call
-                        next_action = await retry_with_backoff(
-                            get_next_action,
-                            max_retries=2,
-                            initial_delay=1.0
-                        )
-                        self.logger.info("%s", next_action)
-                    except Exception as e:
-                        self.logger.warning(f"Failed to describe next action after retries: {e}")
-                        next_action = "Processing research..."
-
-                    # Yield status update
-                    yield f"{next_action}"
-
-                    # Check for termination conditions
-                    if (
-                        "APPROVED:" in next_action
-                        or "FINAL:" in next_action
-                        or "Solution complete" in next_action
-                        or iteration_count >= maximum_iterations
-                    ):
-                        self.logger.info(
-                            f"Conversation terminating: {next_action} (iteration {iteration_count})"
-                        )
-                        break
-
-                    # Safety check - prevent infinite loops
-                    if iteration_count >= maximum_iterations * 2:
-                        self.logger.warning(
-                            f"Force terminating after {iteration_count} iterations"
-                        )
-                        break
-
-            # Use the final response we collected during the conversation
+            # Find the actual research response (not APPROVED messages)
             if not final_response:
-                # Fallback to the last assistant message
-                assistant_messages = [
-                    msg for msg in messages if msg.get("role") == "assistant"
-                ]
-                if assistant_messages:
-                    final_response = clean_message_for_json(assistant_messages[-1])
-                else:
-                    # Ultimate fallback if no messages found
+                # Look for ResearchAgent messages with actual content
+                for msg in reversed(messages):
+                    if (msg.get("name") == "ResearchAgent" and 
+                        msg.get("content") and 
+                        not msg["content"].startswith("APPROVED") and
+                        "## Research Summary" in msg["content"]):
+                        final_response = clean_message_for_json(msg)
+                        break
+                
+                # If still no response, look for any non-APPROVED assistant message
+                if not final_response:
+                    for msg in reversed(messages):
+                        if (msg.get("role") == "assistant" and 
+                            msg.get("content") and 
+                            not msg["content"].startswith("APPROVED") and
+                            not msg["content"].startswith("REJECTED")):
+                            final_response = clean_message_for_json(msg)
+                            break
+                
+                # Ultimate fallback
+                if not final_response:
                     final_response = {
                         "role": "assistant",
                         "content": "I wasn't able to generate a complete response. Please try again with more specific requirements about your research question.",
@@ -421,59 +487,79 @@ class DebateOrchestrator:
             # Add the clean transcript to the final response
             final_response["debate_transcript"] = clean_debate_transcript
             
-            # Collect all sources from the agentic retrieval plugin using exhaustive search results
-            sources = []
+            # Collect all sources from retrieval results following new pattern
+            sources: List[Dict[str, Any]] = []
             if self.agentic_plugin and hasattr(self.agentic_plugin, 'retrieval_results'):
                 citation_counter = 1
                 processed_docs = set()
                 
-                # Get all cached retrieval results from exhaustive research
-                for conversation_id, results in self.agentic_plugin.retrieval_results.items():
-                    for result in results:
-                        doc_title = result.get('document_title', 'Unknown Document')
+                # Process all retrieval results
+                for message_id, retrieval_result in self.agentic_plugin.retrieval_results.items():
+                    try:
+                        # Check if retrieval_result has references attribute
+                        if hasattr(retrieval_result, 'references') and retrieval_result.references:
+                            for reference in retrieval_result.references:
+                                # Extract document information
+                                doc_dict = reference.as_dict() if hasattr(reference, 'as_dict') else reference
+                                doc_title = doc_dict.get('document_title') or doc_dict.get('title', f'Document {citation_counter}')
+                                
+                                # Only add each document once
+                                if doc_title not in processed_docs and doc_title != 'Unknown Document':
+                                    processed_docs.add(doc_title)
+                                    
+                                    # Extract content snippet
+                                    content = doc_dict.get('content_text', '') or doc_dict.get('content', '')
+                                    content_snippet = content[:200] + "..." if len(content) > 200 else content
+                                    
+                                    # Generate document URL
+                                    document_url = ""
+                                    if doc_title.endswith('.pdf') and hasattr(self.agentic_plugin, '_generate_blob_sas_url'):
+                                        document_url = self.agentic_plugin._generate_blob_sas_url(doc_title)
+                                    elif doc_dict.get('content_path', '').startswith("http"):
+                                        document_url = doc_dict.get('content_path', '')
+                                    
+                                    # Get relevance score from Azure AI Search
+                                    relevance_score = doc_dict.get('@search.reranker_score', 
+                                                                  doc_dict.get('@search.score', 
+                                                                  doc_dict.get('relevance_score', 0)))
+                                    
+                                    sources.append({
+                                        'citation_number': citation_counter,
+                                        'title': doc_title,
+                                        'filename': doc_title,
+                                        'content_snippet': content_snippet,
+                                        'relevance_score': relevance_score,
+                                        'content_type': 'image' if 'images/' in doc_dict.get('content_path', '') else 'text',
+                                        'document_url': document_url
+                                    })
+                                    citation_counter += 1
                         
-                        # Only add each document once
-                        if doc_title not in processed_docs:
-                            processed_docs.add(doc_title)
-                            content_snippet = result.get('content_text', '')[:200] + "..." if len(result.get('content_text', '')) > 200 else result.get('content_text', '')
+                        # Also check response attribute for inline sources
+                        elif hasattr(retrieval_result, 'response') and retrieval_result.response:
+                            # The response might contain source information
+                            self.logger.info("Checking response attribute for sources")
+                            # This is a fallback - sources should be in references
                             
-                            # Generate SAS URL for PDF documents
-                            document_url = ""
-                            if doc_title.endswith('.pdf') and self.agentic_plugin:
-                                document_url = self.agentic_plugin._generate_blob_sas_url(doc_title)
-                            elif result.get('content_path', '') and result.get('content_path', '').startswith("http"):
-                                document_url = result.get('content_path', '')
-                            
-                            # Create topic relation summary for this source
-                            topic_relation_summary = ""
-                            if user_query and self.agentic_plugin:
-                                topic_relation_summary = self.agentic_plugin._create_source_summary(result, user_query)
-                            
-                            sources.append({
-                                'citation_number': citation_counter,
-                                'title': doc_title,
-                                'filename': doc_title,
-                                'content_snippet': content_snippet,
-                                'topic_relation_summary': topic_relation_summary,
-                                'relevance_score': result.get('@search.reranker_score', result.get('@search.score', 0)),
-                                'content_type': 'image' if result.get('content_path', '') and 'images/' in result.get('content_path', '') else 'text',
-                                'document_url': document_url
-                            })
-                            citation_counter += 1
+                    except Exception as e:
+                        self.logger.error(f"Error processing retrieval result: {e}")
+                        continue
+            
+            # Log source collection results
+            self.logger.info(f"Collected {len(sources)} sources from retrieval results")
             
             # Add comprehensive research summary
             if sources:
                 research_summary = (
                     f"Comprehensive research identified {len(sources)} relevant sources covering "
-                    f"multiple aspects of the topic. The research includes technical documentation, "
+                    f"multiple aspects of {user_query or 'the topic'}. The research includes technical documentation, "
                     f"academic studies, and practical applications."
                 )
             else:
                 research_summary = "Limited sources were found for this research topic."
             
-            # Add enhanced sources response for exhaustive research
+            # Build enhanced final response
             final_response["sources"] = sources
-            final_response["source_count"] = len(sources)
+            final_response["total_sources_found"] = len(sources)
             final_response["research_summary"] = research_summary
             final_response["research_topic"] = user_query or "Unknown topic"
 
@@ -489,5 +575,6 @@ class DebateOrchestrator:
                 "role": "assistant",
                 "content": "I encountered an issue while processing your request. Please try again with a more specific research question.",
                 "error": str(e),
+                "name": "ResearchAgent"
             }
             yield json.dumps(error_response)
