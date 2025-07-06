@@ -43,12 +43,15 @@ from semantic_kernel.agents.strategies import (
 from semantic_kernel.agents.strategies.selection.selection_strategy import (
     SelectionStrategy,
 )
+
 try:
     from .simple_agentic_retrieval import SimpleAgenticRetrieval
+
     AGENTIC_RETRIEVAL_AVAILABLE = True
 except ImportError as e:
     # Handle Azure AI package import failures gracefully
     import logging
+
     logging.error(f"Azure AI agentic retrieval is not available: {e}")
     AGENTIC_RETRIEVAL_AVAILABLE = False
     AGENTIC_RETRIEVAL_ERROR = str(e)
@@ -98,12 +101,12 @@ class DebateOrchestrator:
         credential = DefaultAzureCredential()
 
         # Multi model setup for cost optimization - a service is an LLM in SK terms
-        # 
+        #
         # Why two models?
         # - Executor (gpt-4o): High-capability model for research agents and complex reasoning
         # - Utility (gpt-4o-mini): Cost-effective model for background tasks like status updates
-        # 
-        # This dual-model approach reduces costs by using the expensive model only for 
+        #
+        # This dual-model approach reduces costs by using the expensive model only for
         # actual research tasks while using the cheaper model for descriptive/utility functions.
         #
         # Executor - gpt-4o (primary research and agent conversations)
@@ -135,14 +138,22 @@ class DebateOrchestrator:
             self.logger.info("[DebateOrchestrator] Creating SimpleAgenticRetrieval...")
             try:
                 self.agentic_plugin = SimpleAgenticRetrieval()
-                self.logger.info("[DebateOrchestrator] SimpleAgenticRetrieval created successfully")
+                self.logger.info(
+                    "[DebateOrchestrator] SimpleAgenticRetrieval created successfully"
+                )
             except Exception as e:
-                self.logger.error(f"[DebateOrchestrator] Failed to create SimpleAgenticRetrieval: {e}")
+                self.logger.error(
+                    f"[DebateOrchestrator] Failed to create SimpleAgenticRetrieval: {e}"
+                )
                 self.agentic_plugin = None
         else:
-            self.logger.error("[DebateOrchestrator] Azure AI agentic retrieval is not available")
+            self.logger.error(
+                "[DebateOrchestrator] Azure AI agentic retrieval is not available"
+            )
             self.logger.error(f"[DebateOrchestrator] Error: {AGENTIC_RETRIEVAL_ERROR}")
-            self.logger.error("[DebateOrchestrator] The API will not function properly without Azure AI packages")
+            self.logger.error(
+                "[DebateOrchestrator] The API will not function properly without Azure AI packages"
+            )
             self.agentic_plugin = None
 
         # Create kernel with or without agentic plugin
@@ -154,8 +165,10 @@ class DebateOrchestrator:
                 )
             )
         else:
-            self.logger.warning("[DebateOrchestrator] No agentic search plugin available - agents will not be able to search")
-        
+            self.logger.warning(
+                "[DebateOrchestrator] No agentic search plugin available - agents will not be able to search"
+            )
+
         self.kernel = Kernel(
             services=[executor_service, utility_service],
             plugins=plugins,
@@ -219,7 +232,10 @@ class DebateOrchestrator:
         return agent_group_chat
 
     async def process_conversation(
-        self, user_id: str, conversation_messages: List[Dict[str, Any]], maximum_iterations: int = 3
+        self,
+        user_id: str,
+        conversation_messages: List[Dict[str, Any]],
+        maximum_iterations: int = 3,
     ):
         """
         Processes a conversation by orchestrating interactions between Research KB specialist agents.
@@ -248,41 +264,6 @@ class DebateOrchestrator:
                 # Add any other simple fields you need, but avoid complex objects
             }
 
-        # Define retry decorator for rate limit handling
-        async def retry_with_backoff(
-            func: Callable,
-            max_retries: int = 3,
-            initial_delay: float = 2.0,
-            backoff_factor: float = 2.0,
-            max_delay: float = 30.0
-        ):
-            """Retry function with exponential backoff for rate limit errors."""
-            last_exception = None
-            
-            for attempt in range(max_retries):
-                try:
-                    return await func()
-                except Exception as e:
-                    error_str = str(e)
-                    # Check if it's a rate limit error (429)
-                    if "429" in error_str or "rate limit" in error_str.lower() or "RateLimitError" in str(type(e)):
-                        last_exception = e
-                        if attempt < max_retries - 1:
-                            # Calculate delay with exponential backoff
-                            delay = min(initial_delay * (backoff_factor ** attempt), max_delay)
-                            self.logger.warning(
-                                f"Rate limit hit (attempt {attempt + 1}/{max_retries}). "
-                                f"Retrying in {delay:.1f} seconds..."
-                            )
-                            await asyncio.sleep(delay)
-                            continue
-                    # Re-raise if not a rate limit error
-                    raise e
-            
-            # If we exhausted all retries, raise the last exception
-            if last_exception:
-                raise last_exception
-
         try:
             # Create the agent group chat with specialized research agents
             self.agent_group_chat = self.create_agent_group_chat(
@@ -305,7 +286,9 @@ class DebateOrchestrator:
                 self.agentic_plugin.set_current_query(user_query)
                 self.logger.info(f"Set user query on agentic plugin: {user_query}")
             else:
-                self.logger.warning("No agentic plugin available - search functionality will not work")
+                self.logger.warning(
+                    "No agentic plugin available - search functionality will not work"
+                )
 
             # Format user message for add_chat_messages
             user_messages = [
@@ -347,13 +330,13 @@ class DebateOrchestrator:
             # Store the final response during the conversation
             final_response = None
             research_agents: List[str] = []
-            
+
             # Store all retrieval references from the conversation
             all_references: Dict[str, Any] = {}
 
             # Start the conversation session (tracing commented out)
             # with tracer.start_as_current_span(session_id):
-            
+
             # Initial status message
             yield "Processing your research query..."
 
@@ -371,7 +354,7 @@ class DebateOrchestrator:
                 if message_count > 0:
                     await asyncio.sleep(0.5)  # 500ms delay between agent messages
                 message_count += 1
-                
+
                 # Log the message
                 msg_dict = agent_message.to_dict()
                 self.logger.info("Agent: %s", msg_dict)
@@ -384,53 +367,59 @@ class DebateOrchestrator:
                 clean_message = clean_message_for_json(message_dict)
                 clean_debate_transcript.append(clean_message)
 
-                # Check for search errors and interrupt API immediately
+                # Check for search errors and interrupt API only if we don't have a successful response yet
                 message_content = message_dict.get("content", "")
-                if any(error_phrase in message_content for error_phrase in [
-                    "I cannot retrieve information from the knowledge base",
-                    "Azure AI packages not properly installed",
-                    "Missing required environment variables",
-                    "AZURE_AI_FOUNDRY_PROJECT",
-                    "AZURE_AI_SEARCH_ENDPOINT"
-                ]):
-                    self.logger.error(f"Search error detected in agent response: {message_content}")
-                    # Return error response immediately to interrupt the API
-                    error_response = {
-                        "role": "assistant",
-                        "content": "I cannot retrieve information from the knowledge base at this time. Please check the search service configuration.",
-                        "error": "Search service unavailable",
-                        "name": agent_message.name or "ResearchAgent"
-                    }
-                    yield json.dumps(error_response)
-                    return  # Exit the function immediately
+                if any(
+                    error_phrase in message_content
+                    for error_phrase in [
+                        "I cannot retrieve information from the knowledge base",
+                        "Azure AI packages not properly installed",
+                        "Missing required environment variables",
+                        "AZURE_AI_FOUNDRY_PROJECT",
+                        "AZURE_AI_SEARCH_ENDPOINT",
+                    ]
+                ):
+                    self.logger.error(
+                        f"Search error detected in agent response: {message_content}"
+                    )
+                    # Only return error immediately if we don't have a successful research response yet
+                    if not final_response:
+                        error_response = {
+                            "role": "assistant",
+                            "content": "I cannot retrieve information from the knowledge base at this time. Please check the search service configuration.",
+                            "error": "Search service unavailable",
+                            "name": agent_message.name or "ResearchAgent",
+                        }
+                        yield json.dumps(error_response)
+                        return  # Exit the function immediately
+                    else:
+                        # We have a successful response, so just log the error and continue to return the successful result
+                        self.logger.info(
+                            "Search error occurred after successful research completion - continuing with successful results"
+                        )
+                        break  # Exit the conversation loop to return the successful response
 
                 # Store potential final response from research agents
                 # Only store non-APPROVED/REJECTED messages as final response
-                if (agent_message.name in research_agents and 
-                    not message_content.startswith("APPROVED") and
-                    not message_content.startswith("REJECTED") and
-                    "## Research Summary" in message_content):
+                if (
+                    agent_message.name in research_agents
+                    and not message_content.startswith("APPROVED")
+                    and not message_content.startswith("REJECTED")
+                    and "## Research Summary" in message_content
+                ):
                     final_response = clean_message_for_json(message_dict)
 
                 # Increment iteration count
                 iteration_count += 1
 
-                # Generate descriptive status for the client with retry logic
+                # Generate descriptive status for the client
                 try:
-                    async def get_next_action():
-                        return await describe_next_action(
-                            self.kernel, self.settings_utility, messages
-                        )
-                    
-                    # Use retry logic for the describe_next_action call
-                    next_action = await retry_with_backoff(
-                        get_next_action,
-                        max_retries=2,
-                        initial_delay=1.0
+                    next_action = await describe_next_action(
+                        self.kernel, self.settings_utility, messages
                     )
                     self.logger.info("%s", next_action)
                 except Exception as e:
-                    self.logger.warning(f"Failed to describe next action after retries: {e}")
+                    self.logger.warning(f"Failed to describe next action: {e}")
                     next_action = "Processing research..."
 
                 # Yield status update
@@ -459,23 +448,27 @@ class DebateOrchestrator:
             if not final_response:
                 # Look for ResearchAgent messages with actual content
                 for msg in reversed(messages):
-                    if (msg.get("name") == "ResearchAgent" and 
-                        msg.get("content") and 
-                        not msg["content"].startswith("APPROVED") and
-                        "## Research Summary" in msg["content"]):
+                    if (
+                        msg.get("name") == "ResearchAgent"
+                        and msg.get("content")
+                        and not msg["content"].startswith("APPROVED")
+                        and "## Research Summary" in msg["content"]
+                    ):
                         final_response = clean_message_for_json(msg)
                         break
-                
+
                 # If still no response, look for any non-APPROVED assistant message
                 if not final_response:
                     for msg in reversed(messages):
-                        if (msg.get("role") == "assistant" and 
-                            msg.get("content") and 
-                            not msg["content"].startswith("APPROVED") and
-                            not msg["content"].startswith("REJECTED")):
+                        if (
+                            msg.get("role") == "assistant"
+                            and msg.get("content")
+                            and not msg["content"].startswith("APPROVED")
+                            and not msg["content"].startswith("REJECTED")
+                        ):
                             final_response = clean_message_for_json(msg)
                             break
-                
+
                 # Ultimate fallback
                 if not final_response:
                     final_response = {
@@ -486,77 +479,141 @@ class DebateOrchestrator:
 
             # Add the clean transcript to the final response
             final_response["debate_transcript"] = clean_debate_transcript
-            
+
             # Collect all sources from retrieval results following new pattern
             sources: List[Dict[str, Any]] = []
-            if self.agentic_plugin and hasattr(self.agentic_plugin, 'retrieval_results'):
+            if self.agentic_plugin and hasattr(
+                self.agentic_plugin, "retrieval_results"
+            ):
                 citation_counter = 1
                 processed_docs = set()
-                
+
+                # Define file extensions that qualify for citations
+                valid_extensions = [
+                    ".pdf",
+                    ".docx",
+                    ".doc",
+                    ".txt",
+                    ".xlsx",
+                    ".xls",
+                    ".pptx",
+                    ".ppt",
+                    ".md",
+                    ".html",
+                    ".htm",
+                ]
+
                 # Process all retrieval results
-                for message_id, retrieval_result in self.agentic_plugin.retrieval_results.items():
+                for (
+                    message_id,
+                    retrieval_result,
+                ) in self.agentic_plugin.retrieval_results.items():
                     try:
                         # Check if retrieval_result has references attribute
-                        if hasattr(retrieval_result, 'references') and retrieval_result.references:
+                        if (
+                            hasattr(retrieval_result, "references")
+                            and retrieval_result.references
+                        ):
                             for reference in retrieval_result.references:
                                 # Extract document information
-                                doc_dict = reference.as_dict() if hasattr(reference, 'as_dict') else reference
-                                doc_title = doc_dict.get('document_title') or doc_dict.get('title', f'Document {citation_counter}')
-                                
-                                # Only add each document once
-                                if doc_title not in processed_docs and doc_title != 'Unknown Document':
-                                    processed_docs.add(doc_title)
-                                    
-                                    # Extract content snippet
-                                    content = doc_dict.get('content_text', '') or doc_dict.get('content', '')
-                                    content_snippet = content[:200] + "..." if len(content) > 200 else content
-                                    
-                                    # Generate document URL
-                                    document_url = ""
-                                    if doc_title.endswith('.pdf') and hasattr(self.agentic_plugin, '_generate_blob_sas_url'):
-                                        document_url = self.agentic_plugin._generate_blob_sas_url(doc_title)
-                                    elif doc_dict.get('content_path', '').startswith("http"):
-                                        document_url = doc_dict.get('content_path', '')
-                                    
-                                    # Get relevance score from Azure AI Search
-                                    relevance_score = doc_dict.get('@search.reranker_score', 
-                                                                  doc_dict.get('@search.score', 
-                                                                  doc_dict.get('relevance_score', 0)))
-                                    
-                                    sources.append({
-                                        'citation_number': citation_counter,
-                                        'title': doc_title,
-                                        'filename': doc_title,
-                                        'content_snippet': content_snippet,
-                                        'relevance_score': relevance_score,
-                                        'content_type': 'image' if 'images/' in doc_dict.get('content_path', '') else 'text',
-                                        'document_url': document_url
-                                    })
-                                    citation_counter += 1
-                        
+                                doc_dict = (
+                                    reference.as_dict()
+                                    if hasattr(reference, "as_dict")
+                                    else reference
+                                )
+                                doc_title = doc_dict.get(
+                                    "document_title"
+                                ) or doc_dict.get("title", "")
+
+                                # Only process documents with valid file extensions
+                                if doc_title and any(
+                                    doc_title.lower().endswith(ext)
+                                    for ext in valid_extensions
+                                ):
+                                    # Only add each unique document once
+                                    if doc_title not in processed_docs:
+                                        processed_docs.add(doc_title)
+
+                                        # Extract content snippet
+                                        content = doc_dict.get(
+                                            "content_text", ""
+                                        ) or doc_dict.get("content", "")
+                                        content_snippet = (
+                                            content[:200] + "..."
+                                            if len(content) > 200
+                                            else content
+                                        )
+
+                                        # Generate document URL
+                                        document_url = ""
+                                        if doc_title.endswith(".pdf") and hasattr(
+                                            self.agentic_plugin,
+                                            "_generate_blob_sas_url",
+                                        ):
+                                            document_url = self.agentic_plugin._generate_blob_sas_url(
+                                                doc_title
+                                            )
+                                        elif doc_dict.get(
+                                            "content_path", ""
+                                        ).startswith("http"):
+                                            document_url = doc_dict.get(
+                                                "content_path", ""
+                                            )
+
+                                        # Get relevance score from Azure AI Search
+                                        relevance_score = doc_dict.get(
+                                            "@search.reranker_score",
+                                            doc_dict.get(
+                                                "@search.score",
+                                                doc_dict.get("relevance_score", 0),
+                                            ),
+                                        )
+
+                                        sources.append(
+                                            {
+                                                "citation_number": citation_counter,
+                                                "title": doc_title,
+                                                "filename": doc_title,
+                                                "content_snippet": content_snippet,
+                                                "relevance_score": relevance_score,
+                                                "content_type": "image"
+                                                if "images/"
+                                                in doc_dict.get("content_path", "")
+                                                else "text",
+                                                "document_url": document_url,
+                                            }
+                                        )
+                                        citation_counter += 1
+
                         # Also check response attribute for inline sources
-                        elif hasattr(retrieval_result, 'response') and retrieval_result.response:
+                        elif (
+                            hasattr(retrieval_result, "response")
+                            and retrieval_result.response
+                        ):
                             # The response might contain source information
                             self.logger.info("Checking response attribute for sources")
                             # This is a fallback - sources should be in references
-                            
+
                     except Exception as e:
                         self.logger.error(f"Error processing retrieval result: {e}")
                         continue
-            
+
             # Log source collection results
-            self.logger.info(f"Collected {len(sources)} sources from retrieval results")
-            
+            unique_docs = len(processed_docs) if "processed_docs" in locals() else 0
+            self.logger.info(
+                f"Collected {len(sources)} unique document citations from {unique_docs} total unique documents"
+            )
+
             # Add comprehensive research summary
             if sources:
                 research_summary = (
-                    f"Comprehensive research identified {len(sources)} relevant sources covering "
-                    f"multiple aspects of {user_query or 'the topic'}. The research includes technical documentation, "
-                    f"academic studies, and practical applications."
+                    f"Research identified {len(sources)} unique document sources with valid filenames. "
+                    f"Sources include {', '.join(set(source['title'].split('.')[-1].upper() for source in sources))} files "
+                    f"covering multiple aspects of {user_query or 'the topic'}."
                 )
             else:
-                research_summary = "Limited sources were found for this research topic."
-            
+                research_summary = "No documents with valid filenames were found for this research topic."
+
             # Build enhanced final response
             final_response["sources"] = sources
             final_response["total_sources_found"] = len(sources)
@@ -575,6 +632,6 @@ class DebateOrchestrator:
                 "role": "assistant",
                 "content": "I encountered an issue while processing your request. Please try again with a more specific research question.",
                 "error": str(e),
-                "name": "ResearchAgent"
+                "name": "ResearchAgent",
             }
             yield json.dumps(error_response)
