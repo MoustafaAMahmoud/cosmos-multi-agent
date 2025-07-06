@@ -32,12 +32,6 @@ from azure.search.documents.indexes.models import (
 from azure.ai.agents.models import FunctionTool, ToolSet, ListSortOrder
 
 from azure.search.documents.agent import KnowledgeAgentRetrievalClient
-from azure.search.documents.agent.models import (
-    KnowledgeAgentRetrievalRequest,
-    KnowledgeAgentMessage,
-    KnowledgeAgentMessageTextContent,
-    KnowledgeAgentIndexParams,
-)
 from azure.search.documents.indexes import SearchIndexClient
 from semantic_kernel.functions import kernel_function
 
@@ -77,13 +71,13 @@ def check_environment(config: Dict[str, Any]):
         raise ValueError(
             f"Missing required environment variables: {', '.join(missing_vars)}"
         )
-    
+
+
 def get_credentials():
     """Initialize and return Azure credentials."""
     credential = DefaultAzureCredential()
     search_credential = AzureKeyCredential(os.environ["AZURE_AI_SEARCH_API_KEY"])
     return credential, search_credential
-
 
 
 def create_ai_agent(
@@ -244,11 +238,12 @@ def attach_agent_to_knowledgebase(
     print(f"  - Reranker threshold: {reranker_threshold}")
     print(f"  - Using model: {openai_config['model_name']}")
 
+
 class SimpleAgenticRetrieval:
     """
     Simple Azure AI agentic retrieval implementation following main.py pattern.
-    
-    This class provides a clean interface for Azure AI Search with agentic 
+
+    This class provides a clean interface for Azure AI Search with agentic
     capabilities while supporting Semantic Kernel integration.
     """
 
@@ -262,7 +257,7 @@ class SimpleAgenticRetrieval:
 
         # Initialize credentials
         self.credential, self.search_credential = get_credentials()
-            # Prepare OpenAI configuration
+        # Prepare OpenAI configuration
         self.openai_config = {
             "endpoint": self.config["openai_endpoint"],
             "deployment_name": self.config["azure_openai_gpt_deployment"],
@@ -272,13 +267,12 @@ class SimpleAgenticRetrieval:
 
         # Initialize project client (following main.py)
         self.project_client = AIProjectClient(
-            endpoint=self.config["project_endpoint"],
-            credential=self.credential
+            endpoint=self.config["project_endpoint"], credential=self.credential
         )
 
         # Create AI agent
         self.project_client, self.ai_agent = create_ai_agent(
-            agent_name= self.config["agent_name"],
+            agent_name=self.config["agent_name"],
             agent_model=self.config["agent_model"],
             model_instructions=self.config["agent_instructions"],
             azure_foundry_project_endpoint=self.config["project_endpoint"],
@@ -295,14 +289,15 @@ class SimpleAgenticRetrieval:
             reranker_threshold=2.5,
         )
 
-        
         # Initialize search/agent client (following main.py pattern)
         self.agent_client = KnowledgeAgentRetrievalClient(
             endpoint=self.config["search_endpoint"],
             agent_name=self.config.get("agent_name", "ai-search-agent"),
             credential=self.search_credential,
         )
-        self.logger.info(f"Created search client with endpoint: {self.config['search_endpoint']}")
+        self.logger.info(
+            f"Created search client with endpoint: {self.config['search_endpoint']}"
+        )
 
         # Create conversation thread
         self.thread = self.project_client.agents.threads.create()
@@ -337,9 +332,7 @@ class SimpleAgenticRetrieval:
         """Get recent messages from the conversation thread (following main.py pattern)."""
         try:
             messages = self.project_client.agents.messages.list(
-                self.thread.id, 
-                limit=limit, 
-                order=ListSortOrder.DESCENDING
+                self.thread.id, limit=limit, order=ListSortOrder.DESCENDING
             )
             messages = list(messages)
             messages.reverse()
@@ -352,10 +345,10 @@ class SimpleAgenticRetrieval:
     def _perform_agentic_retrieval(self, messages: list) -> Any:
         """
         Perform the actual agentic retrieval following main.py pattern.
-        
+
         Args:
             messages: List of messages from the thread
-            
+
         Returns:
             Retrieval result object
         """
@@ -363,14 +356,13 @@ class SimpleAgenticRetrieval:
         formatted_messages = [
             KnowledgeAgentMessage(
                 role=msg["role"],
-                content=[
-                    KnowledgeAgentMessageTextContent(text=msg.content[0].text)
-                ],
+                content=[KnowledgeAgentMessageTextContent(text=msg.content[0].text)],
             )
             for msg in messages
             if msg["role"] != "system"
         ]
-        
+        max_subqueries = 10
+        max_docs_for_reranker = max_subqueries * 50
         # Perform retrieval (following main.py)
         retrieval_result = self.agent_client.retrieve(
             retrieval_request=KnowledgeAgentRetrievalRequest(
@@ -378,66 +370,66 @@ class SimpleAgenticRetrieval:
                 target_index_params=[
                     KnowledgeAgentIndexParams(
                         index_name=self.config["index_name"],
-                        reranker_threshold=0.2,  # Using same default as main.py
-                        # semantic_configuration=self.config["semantic_config"],
-                        # max_search_queries=5,  # Allow multiple subqueries
-                        # max_search_results=20   # Results per subquery
+                        reranker_threshold=0.2,
+                        include_reference_source_data=True,
+                        max_docs_for_reranker=max_docs_for_reranker,
                     )
                 ],
             )
         )
-        
+
         return retrieval_result
 
     def search(self, query: str, max_results: int = 20) -> str:
         """
         Perform agentic search following main.py pattern.
-        
+
         Args:
             query: Search query
             max_results: Maximum number of results (kept for compatibility)
-            
+
         Returns:
             Search results as formatted text
         """
         try:
             self.logger.info(f"Starting agentic search for: {query}")
-            
+
             # Add the query as a user message if needed
             if query and query != self.current_query:
                 self.add_user_message(query)
-            
+
             # Get recent messages (following main.py pattern)
             messages = self.get_recent_messages(limit=5)
-            
+
             # If no messages, create one with the query
             if not messages and query:
                 message = self.add_user_message(query)
                 if message:
                     messages = [message]
-            
+
             if not messages:
                 return "No messages available for search"
-            
+
             # Perform retrieval
             retrieval_result = self._perform_agentic_retrieval(messages)
-            
+
             # Store results (following main.py pattern)
             last_message = messages[-1]
             self.retrieval_results[last_message.id] = retrieval_result
             self.logger.info(f"Stored results for message: {last_message.id}")
-            
+
             # Return response (following main.py pattern)
             response = retrieval_result.response[0].content[0].text
             self.logger.info(f"Search completed successfully")
-            
+
             return response
 
         except Exception as e:
             self.logger.error(f"Search failed: {e}")
             import traceback
+
             traceback.print_exc()
-            
+
             if "Forbidden" in str(e):
                 return "Search failed due to authentication/authorization error. Please check Azure credentials and permissions."
             else:
@@ -446,18 +438,22 @@ class SimpleAgenticRetrieval:
     def get_retrieval_details(self, message_id: str) -> Optional[Dict[str, Any]]:
         """
         Get detailed retrieval results for a specific message.
-        
+
         Args:
             message_id: The message ID to get results for
-            
+
         Returns:
             Dictionary with activity and references, or None if not found
         """
         retrieval_result = self.retrieval_results.get(message_id)
         if retrieval_result:
             return {
-                "activity": [activity.as_dict() for activity in retrieval_result.activity],
-                "references": [reference.as_dict() for reference in retrieval_result.references]
+                "activity": [
+                    activity.as_dict() for activity in retrieval_result.activity
+                ],
+                "references": [
+                    reference.as_dict() for reference in retrieval_result.references
+                ],
             }
         return None
 
@@ -469,7 +465,7 @@ class SimpleAgenticRetrieval:
     def agentic_retrieval(self, query: Optional[str] = None) -> str:
         """
         Kernel function for agentic retrieval.
-        
+
         This function follows the exact pattern from main.py's agentic_retrieval function.
         """
         if not query:
@@ -477,14 +473,14 @@ class SimpleAgenticRetrieval:
             messages = self.get_recent_messages(limit=5)
             if not messages:
                 return "No messages available for retrieval"
-            
+
             # Perform retrieval
             retrieval_result = self._perform_agentic_retrieval(messages)
-            
+
             # Store results
             last_message = messages[-1]
             self.retrieval_results[last_message.id] = retrieval_result
-            
+
             # Return response
             return retrieval_result.response[0].content[0].text
         else:
@@ -503,77 +499,110 @@ class SimpleAgenticRetrieval:
         try:
             research_query = f"Comprehensive research on: {topic}"
             self.logger.info(f"Starting comprehensive research for topic: {topic}")
-            
+
             # Perform the search
             search_results = self.search(research_query)
-            
+
             # Get the stored retrieval details for the last search
             if self.retrieval_results:
                 last_message_id = list(self.retrieval_results.keys())[-1]
                 retrieval_result = self.retrieval_results[last_message_id]
-                
+
                 # Format sources for the agent
                 sources = []
                 citation_counter = 0
-                
-                if hasattr(retrieval_result, 'references') and retrieval_result.references:
-                    self.logger.info(f"Found {len(retrieval_result.references)} references")
+
+                if (
+                    hasattr(retrieval_result, "references")
+                    and retrieval_result.references
+                ):
+                    self.logger.info(
+                        f"Found {len(retrieval_result.references)} references"
+                    )
                     for idx, reference in enumerate(retrieval_result.references):
-                        ref_dict = reference.as_dict() if hasattr(reference, 'as_dict') else reference
-                        
+                        ref_dict = (
+                            reference.as_dict()
+                            if hasattr(reference, "as_dict")
+                            else reference
+                        )
+
                         # Extract document title
-                        doc_title = ref_dict.get('document_title', ref_dict.get('title', f'Document {idx}'))
-                        
+                        doc_title = ref_dict.get(
+                            "document_title", ref_dict.get("title", f"Document {idx}")
+                        )
+
                         # Extract content
-                        content_text = ref_dict.get('content_text', ref_dict.get('content', ''))
-                        content_snippet = content_text[:300] + '...' if len(content_text) > 300 else content_text
-                        
+                        content_text = ref_dict.get(
+                            "content_text", ref_dict.get("content", "")
+                        )
+                        content_snippet = (
+                            content_text[:300] + "..."
+                            if len(content_text) > 300
+                            else content_text
+                        )
+
                         # Extract relevance score
-                        relevance_score = ref_dict.get('@search.reranker_score', 
-                                                      ref_dict.get('@search.score', 
-                                                      ref_dict.get('relevance_score', 0)))
-                        
-                        sources.append({
-                            'citation_number': idx,
-                            'title': doc_title,
-                            'content_snippet': content_snippet,
-                            'relevance_score': relevance_score,
-                            'document_url': ref_dict.get('content_path', '')
-                        })
+                        relevance_score = ref_dict.get(
+                            "@search.reranker_score",
+                            ref_dict.get(
+                                "@search.score", ref_dict.get("relevance_score", 0)
+                            ),
+                        )
+
+                        sources.append(
+                            {
+                                "citation_number": idx,
+                                "title": doc_title,
+                                "content_snippet": content_snippet,
+                                "relevance_score": relevance_score,
+                                "document_url": ref_dict.get("content_path", ""),
+                            }
+                        )
                         citation_counter = idx
                 else:
                     self.logger.warning("No references found in retrieval result")
-                
+
                 # Create structured response that ResearchAgent expects
                 result = {
-                    'research_summary': search_results if search_results else 'No results found',
-                    'total_sources_found': len(sources),
-                    'sources': sources
+                    "research_summary": search_results
+                    if search_results
+                    else "No results found",
+                    "total_sources_found": len(sources),
+                    "sources": sources,
                 }
-                
-                self.logger.info(f"Returning research results with {len(sources)} sources")
-                
+
+                self.logger.info(
+                    f"Returning research results with {len(sources)} sources"
+                )
+
                 # Return as JSON string for the agent
                 return json.dumps(result, indent=2)
             else:
                 # Return the raw search results if no structured data
-                self.logger.warning("No retrieval results found, returning raw search results")
-                return json.dumps({
-                    'research_summary': search_results,
-                    'total_sources_found': 0,
-                    'sources': []
-                })
-                
+                self.logger.warning(
+                    "No retrieval results found, returning raw search results"
+                )
+                return json.dumps(
+                    {
+                        "research_summary": search_results,
+                        "total_sources_found": 0,
+                        "sources": [],
+                    }
+                )
+
         except Exception as e:
             self.logger.error(f"Error in azure_agentic_research: {e}")
             import traceback
+
             traceback.print_exc()
-            return json.dumps({
-                'error': f"Error performing research: {str(e)}",
-                'research_summary': f"Error performing research: {str(e)}",
-                'total_sources_found': 0,
-                'sources': []
-            })
+            return json.dumps(
+                {
+                    "error": f"Error performing research: {str(e)}",
+                    "research_summary": f"Error performing research: {str(e)}",
+                    "total_sources_found": 0,
+                    "sources": [],
+                }
+            )
 
     @kernel_function(
         name="search",
@@ -591,11 +620,11 @@ class SimpleAgenticRetrieval:
         """Get detailed results from the last search."""
         if not self.retrieval_results:
             return "No search results available"
-        
+
         # Get the most recent result
         last_message_id = list(self.retrieval_results.keys())[-1]
         details = self.get_retrieval_details(last_message_id)
-        
+
         if details:
             return json.dumps(details, indent=2)
         return "No details available"
