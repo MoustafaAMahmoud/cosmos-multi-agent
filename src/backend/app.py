@@ -6,6 +6,12 @@ blog posts using a debate pattern orchestrator, with appropriate logging, tracin
 and metrics configurations.
 """
 
+# Apply Azure AI compatibility patches before any other imports
+try:
+    import azure_ai_patch
+except:
+    pass
+
 import json
 import logging
 import os
@@ -140,12 +146,30 @@ async def http_research_support(request_body: ResearchRequest = Body(...)):
                 try:
                     final_response = json.loads(chunk)
 
+                    # Extract the actual research content from the debate transcript
+                    # The final response might have the wrong content (APPROVED message)
+                    # So we need to find the actual research response
+                    if "debate_transcript" in final_response:
+                        # Find the research agent's actual response (not APPROVED messages)
+                        research_content = None
+                        for msg in final_response["debate_transcript"]:
+                            if (msg.get("name") == "ResearchAgent" and 
+                                msg.get("content") and 
+                                not msg["content"].startswith("APPROVED") and
+                                "## Research Summary" in msg["content"]):
+                                research_content = msg["content"]
+                                break
+                        
+                        # Update the final response content if we found the research
+                        if research_content:
+                            final_response["content"] = research_content
+
                     # Construct the final response object
                     response_obj = {"type": "response", "final_answer": final_response}
 
                     # Add debate details if requested
-                    if request_body.include_debate_details and debate_messages:
-                        response_obj["debate_details"] = debate_messages
+                    if request_body.include_debate_details and "debate_transcript" in final_response:
+                        response_obj["debate_details"] = final_response["debate_transcript"]
 
                     yield json.dumps(response_obj) + "\n"
                 except json.JSONDecodeError:
@@ -164,21 +188,5 @@ async def http_research_support(request_body: ResearchRequest = Body(...)):
 
                 status = {"type": "status", "message": message, "agent": agent}
                 yield json.dumps(status) + "\n"
-
-                # Store message in debate history if details are requested
-                if request_body.include_debate_details and hasattr(
-                    orchestrator, "agent_group_chat"
-                ):
-                    try:
-                        # Get the latest message from the group chat
-                        latest_messages = [
-                            msg
-                            async for msg in orchestrator.agent_group_chat.get_chat_messages()
-                        ]
-                        if latest_messages:
-                            latest = latest_messages[0].to_dict()
-                            debate_messages.append(latest)
-                    except Exception as e:
-                        logger.warning(f"Could not capture debate message: {str(e)}")
 
     return StreamingResponse(stream_response(), media_type="application/json")
