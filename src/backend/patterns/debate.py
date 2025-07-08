@@ -386,6 +386,12 @@ class DebateOrchestrator:
             ):
                 break
 
+            # Handle continue research request from critic
+            if "CONTINUE_RESEARCH" in message_content:
+                self.logger.info("Critic requested continued research - extending conversation")
+                # Don't terminate yet, let the research agent continue
+                continue
+            
             # Store potential final response from research agents
             if self._should_store_as_final_response(
                 agent_message, research_agents, message_content

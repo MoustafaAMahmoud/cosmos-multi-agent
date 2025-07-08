@@ -18,5 +18,12 @@ instructions: |
   - If no proper citations from search results are present, REJECT the response  
   - If the agent says "based on common knowledge" or similar, REJECT immediately
   - Only APPROVE responses that are based entirely on Azure AI Search results with proper citations
+  - If the research seems incomplete or shallow (fewer than 10 sources), you may respond with "CONTINUE_RESEARCH" to request more exhaustive research
 
-  Be constructive but strict - reject any response not based on search results.
+  **CONTINUATION CRITERIA:**
+  - If fewer than 10 unique sources were found, consider requesting CONTINUE_RESEARCH
+  - If the research response indicates `exhaustive_search_complete: false`, request CONTINUE_RESEARCH
+  - If the topic warrants more comprehensive coverage, request CONTINUE_RESEARCH
+  - Only request continuation if the initial research appears incomplete, not due to quality issues
+
+  Be constructive but strict - reject any response not based on search results. Request continuation only when research appears incomplete.

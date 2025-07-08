@@ -605,6 +605,138 @@ class SimpleAgenticRetrieval:
             )
 
     @kernel_function(
+        name="exhaustive_azure_research",
+        description="Perform exhaustive research that continues until no new documents are found",
+    )
+    def exhaustive_azure_research(self, topic: str, max_iterations: int = 5) -> str:
+        """
+        Kernel function for exhaustive research that continues until no new documents are found.
+        Returns results in the format expected by ResearchAgent.
+        """
+        try:
+            self.logger.info(f"Starting exhaustive research for topic: {topic}")
+            
+            all_sources = []
+            all_document_titles = set()
+            iteration = 1
+            
+            while iteration <= max_iterations:
+                self.logger.info(f"Research iteration {iteration} for topic: {topic}")
+                
+                # Perform research for this iteration
+                research_query = f"Comprehensive research iteration {iteration} on: {topic}"
+                search_results = self.search(research_query)
+                
+                # Get the stored retrieval details for this search
+                iteration_sources = []
+                if self.retrieval_results:
+                    last_message_id = list(self.retrieval_results.keys())[-1]
+                    retrieval_result = self.retrieval_results[last_message_id]
+                    
+                    if (
+                        hasattr(retrieval_result, "references")
+                        and retrieval_result.references
+                    ):
+                        for idx, reference in enumerate(retrieval_result.references):
+                            ref_dict = (
+                                reference.as_dict()
+                                if hasattr(reference, "as_dict")
+                                else reference
+                            )
+                            
+                            # Extract document title using multiple fallback options
+                            doc_title = (
+                                ref_dict.get("document_title") or 
+                                ref_dict.get("title") or 
+                                ref_dict.get("filename") or 
+                                ref_dict.get("name") or 
+                                ref_dict.get("content_path", "").split("/")[-1] or
+                                f"Document {len(all_sources) + idx + 1}"
+                            )
+                            
+                            # Only include this source if we haven't seen this document before
+                            if doc_title not in all_document_titles:
+                                all_document_titles.add(doc_title)
+                                
+                                # Extract content
+                                content_text = ref_dict.get(
+                                    "content_text", ref_dict.get("content", "")
+                                )
+                                content_snippet = (
+                                    content_text[:300] + "..."
+                                    if len(content_text) > 300
+                                    else content_text
+                                )
+                                
+                                # Extract relevance score
+                                relevance_score = ref_dict.get(
+                                    "@search.reranker_score",
+                                    ref_dict.get(
+                                        "@search.score", ref_dict.get("relevance_score", 0)
+                                    ),
+                                )
+                                
+                                source = {
+                                    "citation_number": len(all_sources),
+                                    "title": doc_title,
+                                    "content_snippet": content_snippet,
+                                    "relevance_score": relevance_score,
+                                    "document_url": ref_dict.get("content_path", ""),
+                                    "iteration_found": iteration
+                                }
+                                
+                                all_sources.append(source)
+                                iteration_sources.append(source)
+                
+                # Log results for this iteration
+                new_docs_found = len(iteration_sources)
+                self.logger.info(f"Iteration {iteration}: Found {new_docs_found} new documents")
+                
+                # If no new documents were found, stop the research
+                if new_docs_found == 0:
+                    self.logger.info(f"No new documents found in iteration {iteration}. Stopping exhaustive research.")
+                    break
+                
+                iteration += 1
+            
+            # Update citation numbers to be sequential
+            for idx, source in enumerate(all_sources):
+                source["citation_number"] = idx
+            
+            # Create structured response that ResearchAgent expects
+            final_research_summary = f"""Exhaustive research completed across {iteration} iterations, discovering {len(all_sources)} unique sources. 
+Research systematically explored multiple angles of {topic} until no additional relevant documents were found in the knowledge base."""
+            
+            result = {
+                "research_summary": final_research_summary,
+                "total_sources_found": len(all_sources),
+                "sources": all_sources,
+                "iterations_completed": iteration,
+                "exhaustive_search_complete": True
+            }
+            
+            self.logger.info(
+                f"Exhaustive research complete: {len(all_sources)} sources across {iteration} iterations"
+            )
+            
+            # Return as JSON string for the agent
+            return json.dumps(result, indent=2)
+            
+        except Exception as e:
+            self.logger.error(f"Error in exhaustive_azure_research: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps(
+                {
+                    "error": f"Error performing exhaustive research: {str(e)}",
+                    "research_summary": f"Error performing exhaustive research: {str(e)}",
+                    "total_sources_found": 0,
+                    "sources": [],
+                    "exhaustive_search_complete": False
+                }
+            )
+
+    @kernel_function(
         name="search",
         description="Basic search function using Azure AI agentic retrieval",
     )

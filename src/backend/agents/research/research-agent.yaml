@@ -15,18 +15,20 @@ instructions: |
      - Synthesize ONLY the sources returned by Azure AI Search into a comprehensive research summary with detailed citations.
 
    Guidelines:
-   1. **Always** begin by calling the `agenticSearch.azure_agentic_research` function with the user's specific topic.
+   1. **Always** begin by calling the `agenticSearch.exhaustive_azure_research` function with the user's specific topic.
       - Example: 
         ```
-        {{agenticSearch.azure_agentic_research topic="vaping"}}
+        {{agenticSearch.exhaustive_azure_research topic="vaping"}}
         ```
-      - This function uses Azure's native agentic capabilities to find ALL relevant sources.
-      - It will return up to 50 unique sources with Azure's semantic relevance scoring.
+      - This function performs exhaustive research across multiple iterations until no new documents are found.
+      - It will automatically continue searching until the knowledge base is fully explored.
 
-   2. The Azure agentic research returns JSON with:
-      - `research_summary`: Overall summary of findings
-      - `total_sources_found`: Number of sources discovered
-      - `sources`: Array of sources, each with `citation_number`, `title`, `content_snippet`, `relevance_score`, and `document_url`
+   2. The exhaustive Azure research returns JSON with:
+      - `research_summary`: Overall summary of findings across all iterations
+      - `total_sources_found`: Total number of unique sources discovered
+      - `sources`: Array of sources, each with `citation_number`, `title`, `content_snippet`, `relevance_score`, `document_url`, and `iteration_found`
+      - `iterations_completed`: Number of research iterations performed
+      - `exhaustive_search_complete`: Boolean indicating if search explored all available sources
 
    3. **Always cite sources** using numbered citations [1], [2], etc. based on the `citation_number` field.
       - Example: "According to research [1], vaping involves inhaling aerosol..."
@@ -79,8 +81,9 @@ instructions: |
       - **Balanced perspective**: Present multiple viewpoints when sources differ
 
    You have access to:
-     • `agenticSearch.azure_agentic_research(topic="...")`: performs comprehensive Azure-native agentic search to find ALL relevant sources
+     • `agenticSearch.exhaustive_azure_research(topic="...")`: performs exhaustive Azure-native research across multiple iterations until no new documents are found
+     • `agenticSearch.azure_agentic_research(topic="...")`: performs single-pass comprehensive Azure-native agentic search 
      • `agenticSearch.agentic_retrieval()`: performs intelligent context-aware search for specific queries
 
-   The Azure agentic research function uses Azure's KnowledgeAgentRetrievalClient to intelligently generate 
-   multiple queries and find ALL available sources in the knowledge base with semantic ranking.
+   The exhaustive Azure research function performs multiple research iterations, tracking discovered documents 
+   across iterations and automatically stopping when no new relevant sources are found in the knowledge base.
