@@ -309,11 +309,24 @@ class DebateOrchestrator:
         self, agent_message, research_agents: List[str], message_content: str
     ) -> bool:
         """Check if this message should be stored as the final response."""
+        # Exclude critic agent messages completely
+        if "Critic" in agent_message.name or "critic" in agent_message.name:
+            return False
+            
+        # Exclude messages that start with critic keywords
+        critic_keywords = ["APPROVED", "REJECTED", "REVIEW", "CONTINUE_RESEARCH", "REQUEST", "CORRECTION"]
+        if any(message_content.startswith(keyword) for keyword in critic_keywords):
+            return False
+            
+        # Exclude messages that contain "REVIEW RESULT:" anywhere
+        if "REVIEW RESULT:" in message_content:
+            return False
+            
+        # Only accept research agent messages with substantial research content
         return (
             agent_message.name in research_agents
-            and not message_content.startswith("APPROVED")
-            and not message_content.startswith("REJECTED")
             and "## Research Summary" in message_content
+            and len(message_content) > 200  # Ensure substantial content
         )
 
     def _should_terminate_conversation(
@@ -388,10 +401,12 @@ class DebateOrchestrator:
 
             # Handle continue research request from critic
             if "CONTINUE_RESEARCH" in message_content:
-                self.logger.info("Critic requested continued research - extending conversation")
+                self.logger.info(
+                    "Critic requested continued research - extending conversation"
+                )
                 # Don't terminate yet, let the research agent continue
                 continue
-            
+
             # Store potential final response from research agents
             if self._should_store_as_final_response(
                 agent_message, research_agents, message_content
@@ -440,23 +455,41 @@ class DebateOrchestrator:
 
     def _find_fallback_response(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Find a fallback response if no final response was captured during conversation."""
-        # Look for ResearchAgent messages with actual content
+        # Look for ResearchAgent messages with actual research content
         for msg in reversed(messages):
             if (
                 msg.get("name") == "ResearchAgent"
                 and msg.get("content")
                 and not msg["content"].startswith("APPROVED")
+                and not msg["content"].startswith("REJECTED")
+                and not msg["content"].startswith("REVIEW")
+                and not msg["content"].startswith("CONTINUE_RESEARCH")
+                and "REVIEW RESULT:" not in msg["content"]
                 and "## Research Summary" in msg["content"]
+                and len(msg["content"]) > 200  # Ensure substantial content
             ):
                 return self._clean_message_for_json(msg)
 
-        # If still no response, look for any non-APPROVED assistant message
+        # If still no response, look for any substantial research agent message
+        for msg in reversed(messages):
+            if (
+                msg.get("name") == "ResearchAgent"
+                and msg.get("content")
+                and not any(msg["content"].startswith(keyword) for keyword in ["APPROVED", "REJECTED", "REVIEW", "CONTINUE_RESEARCH"])
+                and "REVIEW RESULT:" not in msg["content"]
+                and len(msg["content"]) > 100
+            ):
+                return self._clean_message_for_json(msg)
+
+        # Look for any non-critic assistant message
         for msg in reversed(messages):
             if (
                 msg.get("role") == "assistant"
                 and msg.get("content")
-                and not msg["content"].startswith("APPROVED")
-                and not msg["content"].startswith("REJECTED")
+                and "Critic" not in msg.get("name", "")
+                and not any(msg["content"].startswith(keyword) for keyword in ["APPROVED", "REJECTED", "REVIEW", "CONTINUE_RESEARCH"])
+                and "REVIEW RESULT:" not in msg["content"]
+                and len(msg["content"]) > 50
             ):
                 return self._clean_message_for_json(msg)
 
@@ -627,7 +660,7 @@ class DebateOrchestrator:
         self,
         user_id: str,
         conversation_messages: List[Dict[str, Any]],
-        maximum_iterations: int = 10,
+        maximum_iterations: int = 20,
     ):
         """
         Processes a conversation by orchestrating interactions between Research KB specialist agents.

@@ -147,21 +147,41 @@ async def http_research_support(request_body: ResearchRequest = Body(...)):
                     final_response = json.loads(chunk)
 
                     # Extract the actual research content from the debate transcript
-                    # The final response might have the wrong content (APPROVED message)
+                    # The final response might have the wrong content (APPROVED/REJECTED/REVIEW message)
                     # So we need to find the actual research response
                     if "debate_transcript" in final_response:
-                        # Find the research agent's actual response (not APPROVED messages)
+                        # Find the research agent's actual response (not critic messages)
                         research_content = None
-                        for msg in final_response["debate_transcript"]:
+                        for msg in reversed(final_response["debate_transcript"]):  # Search from latest
                             if (msg.get("name") == "ResearchAgent" and 
                                 msg.get("content") and 
                                 not msg["content"].startswith("APPROVED") and
+                                not msg["content"].startswith("REJECTED") and
+                                not msg["content"].startswith("REVIEW") and
+                                not msg["content"].startswith("CONTINUE_RESEARCH") and
                                 "## Research Summary" in msg["content"]):
                                 research_content = msg["content"]
                                 break
                         
-                        # Update the final response content if we found the research
-                        if research_content:
+                        # Also check if the main content is a critic review and needs replacement
+                        main_content = final_response.get("content", "")
+                        if (main_content.startswith("REVIEW") or 
+                            main_content.startswith("APPROVED") or 
+                            main_content.startswith("REJECTED") or
+                            "REVIEW RESULT:" in main_content):
+                            # This is a critic message, replace with research content
+                            if research_content:
+                                final_response["content"] = research_content
+                            else:
+                                # Fallback: find any ResearchAgent message with content
+                                for msg in reversed(final_response["debate_transcript"]):
+                                    if (msg.get("name") == "ResearchAgent" and 
+                                        msg.get("content") and
+                                        len(msg["content"]) > 100):  # Substantial content
+                                        final_response["content"] = msg["content"]
+                                        break
+                        elif research_content and "## Research Summary" not in main_content:
+                            # Update if we have better research content
                             final_response["content"] = research_content
 
                     # Construct the final response object
