@@ -15,39 +15,38 @@ import logging
 from dotenv import load_dotenv
 import yaml
 
-# Commented out OpenTelemetry imports to avoid Azure AI package conflicts
-# from opentelemetry.sdk.resources import Resource
-# from opentelemetry._logs import set_logger_provider
-# from opentelemetry.metrics import set_meter_provider
-# from opentelemetry.trace import set_tracer_provider
+from opentelemetry.sdk.resources import Resource
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.metrics import set_meter_provider
+from opentelemetry.trace import set_tracer_provider
 
-# from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-# from opentelemetry.sdk._logs.export import (
-#     BatchLogRecordProcessor,
-#     # ConsoleLogExporter
-# )
-# from opentelemetry.sdk.metrics import MeterProvider
-# from opentelemetry.sdk.metrics.view import DropAggregation, View
-# from opentelemetry.sdk.metrics.export import (
-#     PeriodicExportingMetricReader,
-#     # ConsoleMetricExporter
-# )
-# from opentelemetry.sdk.trace import TracerProvider
-# from opentelemetry.sdk.trace.export import (
-#     BatchSpanProcessor,
-#     # ConsoleSpanExporter
-# )
-# from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import (
+    BatchLogRecordProcessor,
+    # ConsoleLogExporter
+)
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.view import DropAggregation, View
+from opentelemetry.sdk.metrics.export import (
+    PeriodicExportingMetricReader,
+    # ConsoleMetricExporter
+)
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    # ConsoleSpanExporter
+)
+from opentelemetry.semconv.resource import ResourceAttributes
 
-# from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-# from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-# from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-# from azure.monitor.opentelemetry.exporter import (
-#     AzureMonitorLogExporter,
-#     AzureMonitorMetricExporter,
-#     AzureMonitorTraceExporter,
-# )
+from azure.monitor.opentelemetry.exporter import (
+    AzureMonitorLogExporter,
+    AzureMonitorMetricExporter,
+    AzureMonitorTraceExporter,
+)
 
 from semantic_kernel.connectors.ai.function_choice_behavior import (
     FunctionChoiceBehavior,
@@ -74,14 +73,13 @@ def load_dotenv_from_azd():
         load_dotenv()
 
 
-# Commented out telemetry resource to avoid import conflicts
-# telemetry_resource = Resource.create(
-#     {
-#         ResourceAttributes.SERVICE_NAME: os.getenv(
-#             "AZURE_RESOURCE_GROUP", "ai-accelerator"
-#         )
-#     }
-# )
+telemetry_resource = Resource.create(
+    {
+        ResourceAttributes.SERVICE_NAME: os.getenv(
+            "AZURE_RESOURCE_GROUP", "ai-accelerator"
+        )
+    }
+)
 
 # Set endpoint to the local Aspire Dashboard endpoint to enable local telemetry - DISABLED by default
 local_endpoint = None
@@ -91,54 +89,132 @@ local_endpoint = None
 def set_up_tracing():
     """
     Sets up exporters for Azure Monitor and optional local telemetry.
-    COMMENTED OUT: Tracing disabled to avoid Azure AI package import conflicts.
     """
-    logging.info("Tracing setup skipped (commented out to avoid import conflicts)")
-    pass
-    
-    # Original tracing setup commented out:
-    # if not os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
-    #     logging.info(
-    #         "APPLICATIONINSIGHTS_CONNECTION_STRING is not set skipping observability setup."
-    #     )
-    #     return
-    #
-    # exporters = []
-    # exporters.append(
-    #     AzureMonitorTraceExporter.from_connection_string(
-    #         os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
-    #     )
-    # )
-    # if local_endpoint:
-    #     exporters.append(OTLPSpanExporter(endpoint=local_endpoint))
-    #
-    # tracer_provider = TracerProvider(resource=telemetry_resource)
-    # for trace_exporter in exporters:
-    #     tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-    # set_tracer_provider(tracer_provider)
+    if not os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        logging.info(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING is not set skipping observability setup."
+        )
+        return
+
+    exporters = []
+    exporters.append(
+        AzureMonitorTraceExporter.from_connection_string(
+            os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+        )
+    )
+    if local_endpoint:
+        exporters.append(OTLPSpanExporter(endpoint=local_endpoint))
+
+    tracer_provider = TracerProvider(resource=telemetry_resource)
+    for trace_exporter in exporters:
+        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+    set_tracer_provider(tracer_provider)
 
 
 def set_up_metrics():
     """
     Configures metrics collection with OpenTelemetry.
-    COMMENTED OUT: Metrics disabled to avoid Azure AI package import conflicts.
+    Configures views to filter metrics to only those starting with "semantic_kernel".
     """
-    logging.info("Metrics setup skipped (commented out to avoid import conflicts)")
-    pass
+    if not os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        logging.info(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING is not set skipping observability setup."
+        )
+        return
+
+    exporters = []
+    if local_endpoint:
+        exporters.append(OTLPMetricExporter(endpoint=local_endpoint))
+    exporters.append(
+        AzureMonitorMetricExporter.from_connection_string(
+            os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+        )
+    )
+
+    metric_readers = [
+        PeriodicExportingMetricReader(exporter, export_interval_millis=5000)
+        for exporter in exporters
+    ]
+
+    meter_provider = MeterProvider(
+        metric_readers=metric_readers,
+        resource=telemetry_resource,
+        views=[
+            # Dropping all instrument names except for those starting with "semantic_kernel"
+            View(instrument_name="*", aggregation=DropAggregation()),
+            View(instrument_name="semantic_kernel*"),
+        ],
+    )
+    set_meter_provider(meter_provider)
 
 
 def set_up_logging():
     """
     Configures logging with OpenTelemetry.
-    COMMENTED OUT: Logging setup disabled to avoid Azure AI package import conflicts.
+    Adds filters to exclude specific namespace logs for cleaner output.
     """
-    logging.info("OpenTelemetry logging setup skipped (commented out to avoid import conflicts)")
-    pass
+    if not os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        logging.info(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING is not set skipping observability setup."
+        )
+        return
+
+    exporters = []
+    exporters.append(
+        AzureMonitorLogExporter(
+            connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+        )
+    )
+
+    if local_endpoint:
+        exporters.append(OTLPLogExporter(endpoint=local_endpoint))
+    # exporters.append(ConsoleLogExporter())
+
+    logger_provider = LoggerProvider(resource=telemetry_resource)
+    set_logger_provider(logger_provider)
+
+    handler = LoggingHandler()
+
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    for log_exporter in exporters:
+        logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
+
+    # FILTER - WHAT NOT TO LOG
+    class KernelFilter(logging.Filter):
+        """
+        A filter to exclude logs from specific semantic_kernel namespaces.
+
+        Prevents excessive logging from specified module namespaces to reduce noise.
+        """
+
+        # These are the namespaces that we want to exclude from logging for the purposes of this demo.
+        namespaces_to_exclude: list[str] = [
+            # "semantic_kernel.functions.kernel_plugin",
+            # "semantic_kernel.prompt_template.kernel_prompt_template",
+            # "semantic_kernel.functions.kernel_function",
+            "azure.monitor.opentelemetry.exporter.export._base",
+            # "azure.core.pipeline.policies.http_logging_policy",
+        ]
+
+        def filter(self, record):
+            return not any(
+                [
+                    record.name.startswith(namespace)
+                    for namespace in self.namespaces_to_exclude
+                ]
+            )
+
+    # FILTER - WHAT TO LOG - EXPLICITLY
+    # handler.addFilter(logging.Filter("semantic_kernel"))
+    handler.addFilter(KernelFilter())
 
 
 async def describe_next_action(kernel, settings, messages):
     """
-    Determines the next action in the research agent conversation workflow.
+    Determines the next action in the Cosmos DB agent conversation workflow.
 
     Args:
         kernel: The Semantic Kernel instance
@@ -146,7 +222,7 @@ async def describe_next_action(kernel, settings, messages):
         messages: Conversation history between agents
 
     Returns:
-        str: A brief summary of the next action, indicating which research agent is acting
+        str: A brief summary of the next action, indicating which Cosmos DB specialist agent is acting
     """
     # Get the last message to determine which agent just spoke
     last_message = messages[-1] if messages else {"name": "None"}
@@ -155,17 +231,16 @@ async def describe_next_action(kernel, settings, messages):
     next_action = await kernel.invoke_prompt(
         function_name="describe_next_action",
         prompt=f"""
-        Given the following conversation between research agents, describe the next action.
+        Given the following conversation between Azure Cosmos DB specialist agents, describe the next action.
 
         Provide a brief summary (3-5 words) of what's happening next in the format: "AGENT: Action description"
 
         AGENTS:
-        - ResearchAgent: Performs intelligent agentic retrieval and research analysis
-        - CompanyResearchAgent: Searches company knowledge base for research
-        - Critic-Team: Evaluates completeness of research solution
+        - ScientificResearchAgent: Retrieves and synthesizes scientific literature
+        - Critic-Team: Evaluates completeness of solution
 
         If the last message is from Critic-Team with a score of 8 or higher, respond with "APPROVED: Solution complete"
-        If a complete research solution has been reached, respond with "FINAL: Complete research provided"
+        If a complete solution has been reached, respond with "FINAL: Complete solution provided"
 
         Last agent to speak: {last_agent}
 

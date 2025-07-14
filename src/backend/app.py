@@ -1,16 +1,10 @@
 """
-FastAPI backend application for blog post generation using AI debate orchestration.
+FastAPI backend application for scientific research using AI debate orchestration.
 
-This module initializes a FastAPI application that exposes endpoints for generating
-blog posts using a debate pattern orchestrator, with appropriate logging, tracing,
+This module initializes a FastAPI application that exposes endpoints for conducting
+scientific research using a debate pattern orchestrator, with appropriate logging, tracing,
 and metrics configurations.
 """
-
-# Apply Azure AI compatibility patches before any other imports
-try:
-    import azure_ai_patch
-except:
-    pass
 
 import json
 import logging
@@ -27,9 +21,9 @@ from utils.util import (
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv_from_azd()
-set_up_tracing()
-set_up_metrics()
-set_up_logging()
+# set_up_tracing()
+# set_up_metrics()
+# set_up_logging()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,7 +61,7 @@ from pydantic import BaseModel
 
 # Define request and response models
 class ResearchRequest(BaseModel):
-    question: str = "Help me with my research question"
+    question: str = "What are the latest developments in renewable energy?"
     user_id: str = "default_user"
     include_debate_details: bool = False
     maximum_iterations: int = 10  # Optional parameter to control conversation length
@@ -97,7 +91,7 @@ orchestrator = DebateOrchestrator()
 @app.post("/api/v1/research-support")
 async def http_research_support(request_body: ResearchRequest = Body(...)):
     """
-    Process a research query using the debate orchestrator.
+    Process a scientific research query using the debate orchestrator.
 
     Args:
         request_body (ResearchRequest): Request body containing:
@@ -146,50 +140,12 @@ async def http_research_support(request_body: ResearchRequest = Body(...)):
                 try:
                     final_response = json.loads(chunk)
 
-                    # Extract the actual research content from the debate transcript
-                    # The final response might have the wrong content (APPROVED/REJECTED/REVIEW message)
-                    # So we need to find the actual research response
-                    if "debate_transcript" in final_response:
-                        # Find the research agent's actual response (not critic messages)
-                        research_content = None
-                        for msg in reversed(final_response["debate_transcript"]):  # Search from latest
-                            if (msg.get("name") == "ResearchAgent" and 
-                                msg.get("content") and 
-                                not msg["content"].startswith("APPROVED") and
-                                not msg["content"].startswith("REJECTED") and
-                                not msg["content"].startswith("REVIEW") and
-                                not msg["content"].startswith("CONTINUE_RESEARCH") and
-                                "## Research Summary" in msg["content"]):
-                                research_content = msg["content"]
-                                break
-                        
-                        # Also check if the main content is a critic review and needs replacement
-                        main_content = final_response.get("content", "")
-                        if (main_content.startswith("REVIEW") or 
-                            main_content.startswith("APPROVED") or 
-                            main_content.startswith("REJECTED") or
-                            "REVIEW RESULT:" in main_content):
-                            # This is a critic message, replace with research content
-                            if research_content:
-                                final_response["content"] = research_content
-                            else:
-                                # Fallback: find any ResearchAgent message with content
-                                for msg in reversed(final_response["debate_transcript"]):
-                                    if (msg.get("name") == "ResearchAgent" and 
-                                        msg.get("content") and
-                                        len(msg["content"]) > 100):  # Substantial content
-                                        final_response["content"] = msg["content"]
-                                        break
-                        elif research_content and "## Research Summary" not in main_content:
-                            # Update if we have better research content
-                            final_response["content"] = research_content
-
                     # Construct the final response object
                     response_obj = {"type": "response", "final_answer": final_response}
 
                     # Add debate details if requested
-                    if request_body.include_debate_details and "debate_transcript" in final_response:
-                        response_obj["debate_details"] = final_response["debate_transcript"]
+                    if request_body.include_debate_details and debate_messages:
+                        response_obj["debate_details"] = debate_messages
 
                     yield json.dumps(response_obj) + "\n"
                 except json.JSONDecodeError:
@@ -208,5 +164,21 @@ async def http_research_support(request_body: ResearchRequest = Body(...)):
 
                 status = {"type": "status", "message": message, "agent": agent}
                 yield json.dumps(status) + "\n"
+
+                # Store message in debate history if details are requested
+                if request_body.include_debate_details and hasattr(
+                    orchestrator, "agent_group_chat"
+                ):
+                    try:
+                        # Get the latest message from the group chat
+                        latest_messages = [
+                            msg
+                            async for msg in orchestrator.agent_group_chat.get_chat_messages()
+                        ]
+                        if latest_messages:
+                            latest = latest_messages[0].to_dict()
+                            debate_messages.append(latest)
+                    except Exception as e:
+                        logger.warning(f"Could not capture debate message: {str(e)}")
 
     return StreamingResponse(stream_response(), media_type="application/json")
