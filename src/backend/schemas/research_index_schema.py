@@ -12,15 +12,14 @@ from typing import List, Optional, Dict, Any
 @dataclass
 class SearchResult:
     """Represents a search result from the research index."""
-    content_id: str
-    text_document_id: Optional[str] = None
-    document_title: Optional[str] = None
-    image_document_id: Optional[str] = None
-    content_text: Optional[str] = None
-    content_path: Optional[str] = None
-    page_number: Optional[int] = None
-    bounding_polygons: Optional[str] = None
-    score: Optional[float] = None
+    chunk_id: str
+    parent_id: Optional[str] = None
+    title: Optional[str] = None
+    chunk: Optional[str] = None
+    content_embedding: Optional[List[float]] = None
+    search_score: Optional[float] = None
+    search_reranker_score: Optional[float] = None
+    search_captions: Optional[List[Dict[str, Any]]] = None
 
 
 @dataclass
@@ -31,14 +30,11 @@ class ResearchIndexConfig:
     index_name: str = "research-agent-index"
     
     # Field names for easy reference
-    CONTENT_ID = "content_id"
-    TEXT_DOCUMENT_ID = "text_document_id"
-    DOCUMENT_TITLE = "document_title"
-    IMAGE_DOCUMENT_ID = "image_document_id"
-    CONTENT_TEXT = "content_text"
+    CHUNK_ID = "chunk_id"
+    PARENT_ID = "parent_id"
+    TITLE = "title"
+    CHUNK = "chunk"
     CONTENT_EMBEDDING = "content_embedding"
-    CONTENT_PATH = "content_path"
-    LOCATION_METADATA = "locationMetadata"
     
     # Semantic search configuration
     semantic_config_name: str = "research-agent-index-semantic-configuration"
@@ -59,31 +55,28 @@ class ResearchIndexConfig:
     def get_searchable_fields(cls) -> List[str]:
         """Get list of searchable fields."""
         return [
-            cls.CONTENT_ID,
-            cls.DOCUMENT_TITLE,
-            cls.CONTENT_TEXT,
-            cls.CONTENT_PATH
+            cls.CHUNK_ID,
+            cls.TITLE,
+            cls.CHUNK
         ]
     
     @classmethod
     def get_retrievable_fields(cls) -> List[str]:
         """Get list of retrievable fields."""
         return [
-            cls.CONTENT_ID,
-            cls.TEXT_DOCUMENT_ID,
-            cls.DOCUMENT_TITLE,
-            cls.IMAGE_DOCUMENT_ID,
-            cls.CONTENT_TEXT,
-            cls.CONTENT_PATH,
-            cls.LOCATION_METADATA
+            cls.CHUNK_ID,
+            cls.PARENT_ID,
+            cls.TITLE,
+            cls.CHUNK,
+            cls.CONTENT_EMBEDDING
         ]
     
     @classmethod
     def get_semantic_fields(cls) -> Dict[str, Any]:
         """Get semantic search field configuration."""
         return {
-            "title_field": cls.DOCUMENT_TITLE,
-            "content_fields": [cls.CONTENT_TEXT],
+            "title_field": cls.TITLE,
+            "content_fields": [cls.CHUNK],
             "keyword_fields": []
         }
 
@@ -93,7 +86,7 @@ RESEARCH_INDEX_SCHEMA = {
     "name": "research-agent-index",
     "fields": [
         {
-            "name": "content_id",
+            "name": "chunk_id",
             "type": "Edm.String",
             "key": True,
             "searchable": True,
@@ -101,25 +94,19 @@ RESEARCH_INDEX_SCHEMA = {
             "analyzer": "keyword"
         },
         {
-            "name": "text_document_id",
+            "name": "parent_id",
             "type": "Edm.String",
             "filterable": True,
             "retrievable": True
         },
         {
-            "name": "document_title",
+            "name": "title",
             "type": "Edm.String",
             "searchable": True,
             "retrievable": True
         },
         {
-            "name": "image_document_id",
-            "type": "Edm.String",
-            "filterable": True,
-            "retrievable": True
-        },
-        {
-            "name": "content_text",
+            "name": "chunk",
             "type": "Edm.String",
             "searchable": True,
             "retrievable": True
@@ -131,29 +118,6 @@ RESEARCH_INDEX_SCHEMA = {
             "retrievable": True,
             "dimensions": 3072,
             "vectorSearchProfile": "research-agent-index-azureOpenAi-text-profile"
-        },
-        {
-            "name": "content_path",
-            "type": "Edm.String",
-            "searchable": True,
-            "retrievable": True
-        },
-        {
-            "name": "locationMetadata",
-            "type": "Edm.ComplexType",
-            "fields": [
-                {
-                    "name": "pageNumber",
-                    "type": "Edm.Int32",
-                    "filterable": True,
-                    "retrievable": True
-                },
-                {
-                    "name": "boundingPolygons",
-                    "type": "Edm.String",
-                    "retrievable": True
-                }
-            ]
         }
     ],
     "semantic": {
@@ -162,8 +126,8 @@ RESEARCH_INDEX_SCHEMA = {
             {
                 "name": "research-agent-index-semantic-configuration",
                 "prioritizedFields": {
-                    "titleField": {"fieldName": "document_title"},
-                    "prioritizedContentFields": [{"fieldName": "content_text"}],
+                    "titleField": {"fieldName": "title"},
+                    "prioritizedContentFields": [{"fieldName": "chunk"}],
                     "prioritizedKeywordsFields": []
                 }
             }

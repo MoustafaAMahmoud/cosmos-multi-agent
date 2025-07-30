@@ -15,17 +15,39 @@ from semantic_kernel.functions import kernel_function
 
 def azure_ai_search_plugin(
     query: str,
-    select: str = "content_id,text_document_id,document_title,image_document_id,content_text,content_path,locationMetadata",
+    select: str = "chunk_id, parent_id, title, chunk, content_embedding",
     k: int = 10,
-    semantic_configuration: str = "research-agent-index-semantic-configuration",
+    semantic_configuration: str = "research-agent-index-semantic",
     vector_field: str = "content_embedding",
     query_type: str = "semantic",
     query_language: str = "en-us",
     timeout: int = 30,
+    excluded_titles: list = None,
 ) -> Union[Dict[str, Any], None]:
     """
     Execute Azure AI Search with semantic + vector search, returning a Python dict
-    with total_count, results, search_id, and semantic_answers.
+    with total_count, results, search_id, semantic_answers, and document_titles.
+
+    Args:
+        query: Search query string
+        select: Fields to select from the search index
+        k: Number of results to return
+        semantic_configuration: Semantic search configuration name
+        vector_field: Field name for vector search
+        query_type: Type of query (semantic, simple, etc.)
+        query_language: Language code for the query
+        timeout: Request timeout in seconds
+        excluded_titles: List of document titles to exclude from results (e.g., ["BR102022001563A2.pdf"])
+
+    The search results will include fields like:
+    - chunk_id: Unique identifier for the chunk
+    - parent_id: Identifier for the parent document
+    - title: Document title
+    - chunk: Text content of the chunk
+    - content_embedding: Vector embedding
+    - @search.score: Search relevance score
+    - @search.rerankerScore: Reranker score (if using semantic search)
+    - @search.captions: Extractive captions (if using semantic search)
     """
     load_dotenv()
     logger = logging.getLogger(__name__)
@@ -62,8 +84,21 @@ def azure_ai_search_plugin(
         "top": k,
         "count": True,  # Include total count
         "captions": "extractive",  # Include captions
-        "answers": "extractive|count-3"  # Include semantic answers
+        "answers": "extractive|count-3",  # Include semantic answers
     }
+
+    # Add filter to exclude specified titles
+    if excluded_titles and len(excluded_titles) > 0:
+        # Create OData filter expression to exclude titles
+        filter_conditions = []
+        for title in excluded_titles:
+            # Escape single quotes in the title for OData
+            escaped_title = title.replace("'", "''")
+            filter_conditions.append(f"title ne '{escaped_title}'")
+        
+        filter_expression = " and ".join(filter_conditions)
+        payload["filter"] = filter_expression
+        logger.info(f"[azureSearchPlugin] Applied exclusion filter: {filter_expression}")
 
     try:
         logger.info(f"Running Azure AI Search for query: '{query}'")
@@ -78,16 +113,16 @@ def azure_ai_search_plugin(
             return None
 
         data = response.json()
-        
+
         # Extract document titles from results
         results = data.get("value", [])
         document_titles = []
-        
+
         for result in results:
-            title = result.get("document_title")
+            title = result.get("title")  # Updated field name
             if title and title not in document_titles:  # Avoid duplicates
                 document_titles.append(title)
-        
+
         return {
             "total_count": data.get("@odata.count", len(results)),
             "results": results,

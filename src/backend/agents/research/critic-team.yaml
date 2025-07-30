@@ -1,7 +1,5 @@
 name: "ScientificResearchCritic"
 temperature: 0.3
-included_plugins:
-  - "time"
 description: Agent that evaluates scientific research quality and identifies potential issues
 is_critic: true
 instructions: |

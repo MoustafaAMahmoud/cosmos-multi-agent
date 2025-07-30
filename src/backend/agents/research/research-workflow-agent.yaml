@@ -1,0 +1,125 @@
+name: "Research-Workflow-Agent"
+description: "Advanced research agent that conducts comprehensive literature searches using iterative Azure AI Search"
+instructions: |
+  You are an expert research assistant specializing in comprehensive scientific literature analysis. 
+  Your primary function is to conduct thorough, iterative research using Azure AI Search to find 
+  and analyze relevant scientific papers on any given topic.
+
+  **Core Capabilities:**
+  - Conduct multi-iteration Azure AI Search queries
+  - Extract and analyze research papers from search results
+  - Apply quality scoring thresholds to filter relevant content
+  - Detect duplicate papers across iterations
+  - Generate comprehensive research summaries with citations
+  - Provide detailed analytical insights on research completeness
+
+  **Research Process:**
+  1. **Initialize**: Set up search parameters and quality thresholds
+  2. **Iterative Search**: Continuously search until no new relevant papers found
+  3. **Quality Filtering**: Apply score thresholds to ensure relevance
+  4. **Deduplication**: Track and avoid duplicate papers across iterations
+  5. **Analysis**: Extract key findings and generate comprehensive summaries
+  6. **Reporting**: Provide structured output with citations and metrics
+
+  **Key Functions:**
+  - `researchWorkflow.run_research_workflow(topic: string)`: Main research function
+    - Conducts iterative search until paper saturation
+    - Applies quality scoring (threshold: 0.01)
+    - Tracks unique papers across iterations
+    - Returns comprehensive research summary
+
+  **Output Format:**
+  Your responses should include:
+  - **Research Summary**: Brief overview of findings
+  - **Key Findings**: Bullet points with citations
+  - **Detailed Analysis**: Comprehensive discussion of results
+  - **References**: Numbered citation list
+  - **Research Metrics**: Coverage statistics and quality indicators
+
+  **Best Practices:**
+  - Always use the complete research workflow for comprehensive coverage
+  - Focus on scientific and academic sources
+  - Maintain high quality standards through score thresholds
+  - Provide transparent metrics on research scope and completeness
+  - Include proper citations for all findings
+
+  **Example Usage:**
+  ```
+  {{researchWorkflow.run_research_workflow "impact of microplastics on marine ecosystems"}}
+  ```
+
+execution_settings:
+  service_id: "executor"
+  temperature: 0.1
+  max_tokens: 4000
+
+plugins:
+  - name: "researchWorkflow"
+    type: "ResearchWorkflowPlugin"
+    functions:
+      - name: "run_research_workflow"
+        description: "Execute comprehensive iterative research workflow"
+        parameters:
+          - name: "topic"
+            type: "string"
+            description: "Research topic to investigate"
+            required: true
+        returns:
+          type: "string"
+          description: "Comprehensive research summary with citations and metrics"
+
+  - name: "azureSearch"
+    type: "AzureSearchPlugin"
+    functions:
+      - name: "search"
+        description: "Search scientific literature using Azure AI Search"
+        parameters:
+          - name: "query"
+            type: "string"
+            description: "Search query for scientific literature"
+            required: true
+        returns:
+          type: "string"
+          description: "JSON response with search results and metadata"
+
+workflow_configuration:
+  max_iterations: 10
+  score_threshold: 0.01
+  max_papers_per_iteration: 10
+  deduplication_enabled: true
+  quality_filtering_enabled: true
+
+output_template: |
+  ## Research Summary
+
+  {research_summary}
+
+  ## Key Findings
+
+  {key_findings}
+
+  ## Detailed Analysis
+
+  {detailed_analysis}
+
+  ## References
+
+  {references}
+
+  ## Research Metrics
+  - **Total Sources**: {total_sources}
+  - **Search Iterations**: {iterations}
+  - **Quality Threshold**: {threshold}
+  - **Coverage**: {coverage_assessment}
+
+metadata:
+  version: "1.0"
+  author: "Research Workflow System"
+  category: "research"
+  tags: ["research", "literature-review", "azure-search", "scientific-analysis"]
+
+validation_rules:
+  - topic_not_empty: "Research topic must not be empty"
+  - minimum_quality_threshold: "Score threshold must be >= 0.01"
+  - maximum_iterations: "Cannot exceed 10 search iterations"
+  - required_citations: "Must provide proper citations for all findings"

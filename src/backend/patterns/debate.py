@@ -41,6 +41,8 @@ from semantic_kernel.agents.strategies.selection.selection_strategy import (
     SelectionStrategy,
 )
 from .search_plugin import AzureSearchPlugin
+from .research_workflow import ResearchWorkflow
+from .research_workflow_plugin import ResearchWorkflowPlugin
 from opentelemetry.trace import get_tracer
 
 from pydantic import Field
@@ -114,10 +116,11 @@ class DebateOrchestrator:
             services=[executor_service, utility_service],
             plugins=[
                 KernelPlugin.from_object(
-                    plugin_instance=TimePlugin(), plugin_name="time"
+                    plugin_instance=AzureSearchPlugin(), plugin_name="azureSearch"
                 ),
                 KernelPlugin.from_object(
-                    plugin_instance=AzureSearchPlugin(), plugin_name="azureSearch"
+                    plugin_instance=ResearchWorkflowPlugin(),
+                    plugin_name="researchWorkflow",
                 ),
             ],
         )
@@ -133,6 +136,9 @@ class DebateOrchestrator:
 
         # Create the agent manager
         self.agent_manager = AgentManager(self.kernel, service_id="executor")
+
+        # Create the research workflow
+        self.research_workflow = ResearchWorkflow(self.kernel)
 
     # --------------------------------------------
     # Create Agent Group Chat
@@ -198,24 +204,7 @@ class DebateOrchestrator:
             Status updates during processing and the final response in JSON format.
         """
 
-        def clean_message_for_json(message_dict):
-            """
-            Create a clean, JSON-serializable version of a message dictionary.
-            """
-            return {
-                "role": message_dict.get("role", "assistant"),
-                "name": message_dict.get("name", "unknown"),
-                "content": message_dict.get("content", ""),
-                # Add any other simple fields you need, but avoid complex objects
-            }
-
         try:
-            # Create the agent group chat with specialized Cosmos DB agents
-            self.agent_group_chat = self.create_agent_group_chat(
-                agents_directory="agents/research",
-                maximum_iterations=maximum_iterations,
-            )
-
             # Extract user query
             user_query = None
             for msg in conversation_messages:
@@ -226,27 +215,6 @@ class DebateOrchestrator:
                 self.logger.warning("No user query found in conversation messages")
                 user_query = "Tell me about Azure Cosmos DB"
 
-            # Format user message for add_chat_messages
-            user_messages = [
-                ChatMessageContent(
-                    role=AuthorRole(m.get("role")),
-                    name=m.get("name"),
-                    content=m.get("content"),
-                )
-                for m in conversation_messages
-                if m.get("role") == "user"
-            ]
-
-            # If we have any user messages, add them to the chat
-            if user_messages:
-                try:
-                    await self.agent_group_chat.add_chat_messages(user_messages)
-                    self.logger.info(
-                        f"Added {len(user_messages)} user messages to chat"
-                    )
-                except Exception as e:
-                    self.logger.warning(f"Error adding chat messages: {e}")
-
             # Setup OpenTelemetry tracing
             tracer = get_tracer(__name__)
 
@@ -254,109 +222,46 @@ class DebateOrchestrator:
             current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
             session_id = f"{user_id}-{current_time}"
 
-            # Track all messages exchanged during this conversation
-            messages = []
-
-            # List to store clean debate messages for the response
-            clean_debate_transcript = []
-
-            # Track iterations to prevent infinite loops
-            iteration_count = 0
-
-            # Store the final response during the conversation
-            final_response = None
-
             # Start the traced conversation session
             with tracer.start_as_current_span(session_id):
                 # Initial status message
                 yield "Evaluating your research question..."
 
-                # Get agent names for later use
-                research_agents = [
-                    agent.name
-                    for agent in self.agent_manager.get_all_agents()
-                    if not agent.name.endswith("Critic")  # All non-critic agents
-                ]
-                
-                critic_agents = [
-                    agent.name
-                    for agent in self.agent_manager.get_all_agents()
-                    if agent.name.endswith("Critic")  # All critic agents
-                ]
+                # Status updates for workflow steps
+                yield "Starting comprehensive research analysis..."
 
-                # Process each message in the conversation
-                async for agent_message in self.agent_group_chat.invoke():
-                    # Log the message
-                    msg_dict = agent_message.to_dict()
-                    self.logger.info("Agent: %s", msg_dict)
+                yield "Searching scientific literature databases..."
 
-                    # Add to messages collection
-                    message_dict = agent_message.to_dict()
-                    messages.append(message_dict)
+                yield "Processing research findings..."
 
-                    # Add clean version to debate transcript
-                    clean_message = clean_message_for_json(message_dict)
-                    clean_debate_transcript.append(clean_message)
+                yield "Adding analytical insights..."
 
-                    # Store final response - prioritize research content over critic decisions
-                    if agent_message.name in research_agents:
-                        # Research content takes precedence (not critic approval messages)
-                        content = message_dict.get("content", "")
-                        # Only store if it's actual research content, not critic-style messages
-                        if not any(keyword in content for keyword in ["APPROVED", "REJECTED", "CONTINUE_RESEARCH"]):
-                            final_response = clean_message_for_json(message_dict)
+                yield "Validating research quality..."
 
-                    # Increment iteration count
-                    iteration_count += 1
+                yield "Finalizing comprehensive research summary..."
 
-                    # Generate descriptive status for the client
-                    next_action = await describe_next_action(
-                        self.kernel, self.settings_utility, messages
+                # Run the research workflow
+                try:
+                    research_result = (
+                        await self.research_workflow.run_research_workflow(user_query)
                     )
-                    self.logger.info("%s", next_action)
 
-                    # Yield status update
-                    yield f"{next_action}"
-
-                    # Check for termination conditions
-                    if (
-                        "APPROVED:" in next_action
-                        or "FINAL:" in next_action
-                        or "Solution complete" in next_action
-                        or iteration_count >= maximum_iterations
-                    ):
-                        self.logger.info(
-                            f"Conversation terminating: {next_action} (iteration {iteration_count})"
-                        )
-                        break
-
-                    # Safety check - prevent infinite loops
-                    if iteration_count >= maximum_iterations * 2:
-                        self.logger.warning(
-                            f"Force terminating after {iteration_count} iterations"
-                        )
-                        break
-
-            # Use the final response we collected during the conversation
-            if not final_response:
-                # Look for research content first (not critic approval messages)
-                research_messages = [
-                    msg for msg in clean_debate_transcript 
-                    if (msg.get("name", "") in research_agents and 
-                        not any(keyword in msg.get("content", "") for keyword in ["APPROVED", "REJECTED", "CONTINUE_RESEARCH"]))
-                ]
-                if research_messages:
-                    final_response = research_messages[-1]  # Use the last research content
-                else:
-                    # Ultimate fallback if no research messages found
+                    # Create final response structure
                     final_response = {
                         "role": "assistant",
-                        "content": "I wasn't able to generate a complete response. Please try again with a more specific scientific research question.",
-                        "name": "ScientificResearchAgent",
+                        "content": research_result,
+                        "name": "ResearchWorkflow",
+                        "debate_transcript": [],  # Empty for now since we're using workflow
                     }
 
-            # Add the clean transcript to the final response
-            final_response["debate_transcript"] = clean_debate_transcript
+                except Exception as e:
+                    self.logger.error(f"Error in research workflow: {str(e)}")
+                    final_response = {
+                        "role": "assistant",
+                        "content": f"I encountered an issue while processing your research request: {str(e)}. Please try again with a more specific question.",
+                        "name": "ResearchWorkflow",
+                        "debate_transcript": [],
+                    }
 
             # Final message is formatted as JSON to indicate the final response
             yield json.dumps(final_response)
